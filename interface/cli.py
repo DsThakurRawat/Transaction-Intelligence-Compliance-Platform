@@ -15,6 +15,7 @@ import analyzers.aml.analyzer
 import analyzers.reconciliation.analyzer
 import analyzers.categorization.analyzer
 import analyzers.disputes.analyzer
+import analyzers.reporting.analyzer
 
 app = typer.Typer(help="Transaction-and-AML-Detection-System")
 console = Console()
