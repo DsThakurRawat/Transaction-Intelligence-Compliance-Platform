@@ -4,7 +4,7 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from decimal import Decimal
-from store.models import Transaction, Flag
+from store.models import Transaction, Flag, AccountBaseline
 from config import get_settings, Settings
 
 class RuleFlag:
@@ -95,29 +95,53 @@ class StructuringRule(Rule):
             return RuleFlag(rule_name=self.name, reason=f"Structuring pattern: {count} transactions just under threshold within {settings.rule_structuring_window_hours}h", severity="critical")
         return None
 
-class CountryMismatchRule(Rule):
-    name = "country_mismatch"
+class BehavioralRule(Rule):
+    """Base class for context-aware rules that require a baseline."""
+    
+    def get_baseline(self, tx: Transaction, session: Session) -> Optional[AccountBaseline]:
+        return session.scalar(
+            select(AccountBaseline).where(AccountBaseline.account_id == tx.account_id)
+        )
+
+class AmountDeviationRule(BehavioralRule):
+    name = "amount_deviation"
     
     def evaluate(self, tx: Transaction, session: Session, settings: Settings) -> Optional[RuleFlag]:
-        # Get count of previous transactions
-        count_stmt = select(func.count()).select_from(Transaction).where(
-            Transaction.account_id == tx.account_id,
-            Transaction.timestamp < tx.timestamp
-        )
-        prior_tx_count = session.scalar(count_stmt)
-        
-        # Require history to prevent false flags on new accounts
-        if prior_tx_count < 5:
+        baseline = self.get_baseline(tx, session)
+        # Min history guard: skip if < 10 txs
+        if not baseline or baseline.tx_count < 10:
             return None
             
-        stmt = select(Transaction.country).where(
-            Transaction.account_id == tx.account_id,
-            Transaction.timestamp < tx.timestamp
-        ).distinct()
-        previous_countries = session.scalars(stmt).all()
+        # Robust z-score using MAD: 0.6745 * (x - median) / MAD
+        robust_z_score = 0.6745 * (float(tx.amount) - float(baseline.amount_median)) / float(baseline.amount_mad)
         
-        if tx.country not in previous_countries:
-            return RuleFlag(rule_name=self.name, reason=f"Country mismatch: {tx.country} not in account history", severity="high")
+        # Flag if out of pattern (z > 3)
+        if robust_z_score > 3.0:
+            return RuleFlag(rule_name=self.name, reason=f"Amount {tx.amount} deviates sharply from profile (robust z-score {robust_z_score:.2f})", severity="high")
+        return None
+
+class NewCountryRule(BehavioralRule):
+    name = "new_country"
+    
+    def evaluate(self, tx: Transaction, session: Session, settings: Settings) -> Optional[RuleFlag]:
+        baseline = self.get_baseline(tx, session)
+        if not baseline or baseline.tx_count < 5: # Kept at 5 to match prior country_mismatch
+            return None
+            
+        if tx.country not in baseline.seen_countries:
+            return RuleFlag(rule_name=self.name, reason=f"Country {tx.country} not in account history", severity="high")
+        return None
+
+class NewMCCRule(BehavioralRule):
+    name = "new_mcc"
+    
+    def evaluate(self, tx: Transaction, session: Session, settings: Settings) -> Optional[RuleFlag]:
+        baseline = self.get_baseline(tx, session)
+        if not baseline or baseline.tx_count < 10:
+            return None
+            
+        if tx.merchant_category not in baseline.seen_mccs:
+            return RuleFlag(rule_name=self.name, reason=f"MCC {tx.merchant_category} not in account history", severity="medium")
         return None
 
 class RuleEngine:
@@ -128,7 +152,9 @@ class RuleEngine:
             OddHourRule(),
             VelocityRule(),
             StructuringRule(),
-            CountryMismatchRule()
+            AmountDeviationRule(),
+            NewCountryRule(),
+            NewMCCRule()
         ]
         
     def evaluate_transaction(self, tx: Transaction, session: Session) -> List[Flag]:

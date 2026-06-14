@@ -10,6 +10,7 @@ from data.anomalies import inject_anomalies
 from data.adapter import map_kaggle_dataset
 from analyze.rules import engine as rule_engine
 from analyze.scoring import score_transaction
+from analyze.baselines import compute_baselines
 from config import get_settings
 from store.models import Transaction, Flag, Score
 from store.queries import compute_summary, get_top_transactions, get_top_accounts
@@ -126,8 +127,11 @@ def scan() -> None:
             console.print("[yellow]No transactions to scan. Run `ingest` first.[/yellow]")
             return
             
+        console.print("Phase 1/2: Computing per-account behavioral baselines...")
+        compute_baselines(session)
+            
         settings = get_settings()
-        console.print(f"Scanning {len(transactions)} transactions...")
+        console.print(f"Phase 2/2: Scanning {len(transactions)} transactions with rules...")
         
         total_flags = 0
         rule_counts = {}

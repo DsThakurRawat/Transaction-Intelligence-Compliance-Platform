@@ -35,7 +35,9 @@ class Settings(BaseSettings):
         "velocity": 40,
         "structuring": 40,
         "amount": 25,
-        "country_mismatch": 25,
+        "amount_deviation": 25,
+        "new_country": 25,
+        "new_mcc": 15,
         "high_risk_mcc": 10,
         "odd_hour": 5
     }

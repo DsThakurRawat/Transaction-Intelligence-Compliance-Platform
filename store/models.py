@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Numeric, String, ForeignKey, UniqueConstraint
+from sqlalchemy import DateTime, Numeric, String, ForeignKey, UniqueConstraint, Integer, JSON
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -48,6 +48,18 @@ class Score(Base):
     account_id: Mapped[str] = mapped_column(String, index=True)
     score: Mapped[int] = mapped_column(Numeric(precision=3, scale=0))
     band: Mapped[str] = mapped_column(String)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+class AccountBaseline(Base):
+    __tablename__ = "baselines"
+    account_id: Mapped[str] = mapped_column(String, primary_key=True)
+    tx_count: Mapped[int] = mapped_column(Integer)
+    amount_median: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    amount_mad: Mapped[Decimal] = mapped_column(Numeric(20, 4))
+    seen_countries: Mapped[list[str]] = mapped_column(JSON)
+    seen_mccs: Mapped[list[str]] = mapped_column(JSON)
     computed_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
