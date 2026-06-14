@@ -1,23 +1,26 @@
 import pytest
 from sqlalchemy import select
-from store.db import SessionLocal, init_db, Base, engine as db_engine
+from store.db import make_engine, Base
+from sqlalchemy.orm import sessionmaker
 from store.models import Transaction, Flag
 from data.generator import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
 from analyze.rules import engine as rule_engine
 
 @pytest.fixture(scope="module")
-def setup_data():
-    init_db()
-    # Ensure fresh DB for tests
-    Base.metadata.drop_all(bind=db_engine)
-    Base.metadata.create_all(bind=db_engine)
-    
+def db_session_factory(tmp_path_factory):
+    tmp_path = tmp_path_factory.mktemp("data")
+    engine = make_engine(f"sqlite:///{tmp_path / 'test_v2.db'}")
+    Base.metadata.create_all(engine)
+    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+@pytest.fixture(scope="module")
+def setup_data(db_session_factory):
     profiles = generate_profiles(50, seed=101)
     df_normal = generate_normal_transactions(profiles, days=30, seed=101)
     df_final = inject_anomalies(df_normal, anomaly_rate=0.20, seed=101)
     
-    with SessionLocal() as session:
+    with db_session_factory() as session:
         # Load into DB
         tx_objects = []
         for _, row in df_final.iterrows():
@@ -43,7 +46,7 @@ def setup_data():
     settings.rule_amount_threshold_inr = 80000.0
     
     # Run scan
-    with SessionLocal() as session:
+    with db_session_factory() as session:
         transactions = session.scalars(select(Transaction).order_by(Transaction.timestamp)).all()
         for tx in transactions:
             flags = rule_engine.evaluate_transaction(tx, session)
@@ -53,11 +56,11 @@ def setup_data():
         
     yield df_final
 
-def test_large_amount_rule(setup_data):
+def test_large_amount_rule(setup_data, db_session_factory):
     df = setup_data
     large_amount_tx_ids = set(df[df['anomaly_type'] == 'large_amount']['transaction_id'])
     
-    with SessionLocal() as session:
+    with db_session_factory() as session:
         flags = session.scalars(select(Flag).where(Flag.rule_name == 'amount')).all()
         flagged_tx_ids = {f.transaction_id for f in flags}
         
@@ -66,11 +69,11 @@ def test_large_amount_rule(setup_data):
     missing = large_amount_tx_ids - flagged_tx_ids
     assert not missing, f"Rule 'amount' missed large_amount transactions: {missing}"
 
-def test_velocity_rule(setup_data):
+def test_velocity_rule(setup_data, db_session_factory):
     df = setup_data
     velocity_tx_ids = set(df[df['anomaly_type'] == 'velocity_fraud']['transaction_id'])
     
-    with SessionLocal() as session:
+    with db_session_factory() as session:
         flags = session.scalars(select(Flag).where(Flag.rule_name == 'velocity')).all()
         flagged_tx_ids = {f.transaction_id for f in flags}
         
@@ -80,11 +83,11 @@ def test_velocity_rule(setup_data):
     caught = velocity_tx_ids.intersection(flagged_tx_ids)
     assert len(caught) > 0, "Velocity rule completely missed velocity_fraud anomalies"
 
-def test_structuring_rule(setup_data):
+def test_structuring_rule(setup_data, db_session_factory):
     df = setup_data
     structuring_tx_ids = set(df[df['anomaly_type'] == 'structuring']['transaction_id'])
     
-    with SessionLocal() as session:
+    with db_session_factory() as session:
         flags = session.scalars(select(Flag).where(Flag.rule_name == 'structuring')).all()
         flagged_tx_ids = {f.transaction_id for f in flags}
         
@@ -93,11 +96,11 @@ def test_structuring_rule(setup_data):
     caught = structuring_tx_ids.intersection(flagged_tx_ids)
     assert len(caught) > 0, "Structuring rule completely missed structuring anomalies"
 
-def test_country_mismatch_rule(setup_data):
+def test_country_mismatch_rule(setup_data, db_session_factory):
     df = setup_data
     geo_tx_ids = set(df[df['anomaly_type'] == 'geo_anomaly']['transaction_id'])
     
-    with SessionLocal() as session:
+    with db_session_factory() as session:
         flags = session.scalars(select(Flag).where(Flag.rule_name == 'country_mismatch')).all()
         flagged_tx_ids = {f.transaction_id for f in flags}
         
