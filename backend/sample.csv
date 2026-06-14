@@ -1,0 +1,8 @@
+transaction_id,account_id,timestamp,amount,currency,merchant,merchant_category,country,channel
+t1,acc1,2026-01-05T10:15:00,1500.00,INR,Amazon,5999,IN,online
+t2,acc1,2026-01-05T12:30:00,250.50,INR,Starbucks,5814,IN,pos
+t3,acc2,2026-01-06T09:00:00,99000.00,USD,Apple,5732,US,online
+t4,acc2,2026-01-06T15:45:00,40.00,EUR,Spotify,5815,DE,online
+t5,acc3,2026-01-07T20:00:00,-500.00,INR,RefundStore,5999,IN,online
+t1,acc1,2026-01-05T10:15:00,1500.00,INR,Amazon,5999,IN,online
+t6,acc3,2026-01-07T21:00:00,notanumber,INR,Glitch,5999,IN,online
