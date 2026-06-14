@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-from store.models import Transaction
+from store.models import Transaction, Score
 
 
 @dataclass
@@ -58,3 +58,32 @@ def compute_summary(session: Session) -> Summary:
         latest=latest,
         by_currency=by_currency,
     )
+
+def get_top_transactions(session: Session, limit: int = 10) -> list[Score]:
+    """Get the top riskiest transactions."""
+    return session.scalars(
+        select(Score).order_by(Score.score.desc()).limit(limit)
+    ).all()
+
+def get_top_accounts(session: Session, limit: int = 10) -> list[tuple[str, int, int]]:
+    """
+    Get the top riskiest accounts by computing the max score and counting critical flags.
+    Returns list of tuples: (account_id, max_score, critical_count).
+    """
+    stmt = (
+        select(
+            Score.account_id,
+            func.max(Score.score).label("max_score"),
+            func.sum(
+                func.case(
+                    (Score.band == "critical", 1),
+                    else_=0
+                )
+            ).label("critical_count")
+        )
+        .group_by(Score.account_id)
+        .order_by(func.max(Score.score).desc())
+        .limit(limit)
+    )
+    
+    return session.execute(stmt).all()
