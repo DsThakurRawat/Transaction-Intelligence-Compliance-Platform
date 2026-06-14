@@ -40,7 +40,7 @@ class Settings(BaseSettings):
         "new_mcc": 15,
         "high_risk_mcc": 10,
         "odd_hour": 5,
-        "ml_anomaly": 30
+        "ml_ensemble": 40
     }
     scoring_band_low: int = 25
     scoring_band_medium: int = 50

@@ -12,7 +12,7 @@ from analyze.rules import engine as rule_engine
 from analyze.scoring import score_transaction
 from analyze.baselines import compute_baselines
 from analyze.features import extract_features
-from analyze.ml import ClassicalAnomalyDetector
+from analyze.ml import EnsembleAnomalyDetector
 from config import get_settings
 from store.models import Transaction, Flag, Score
 from store.queries import compute_summary, get_top_transactions, get_top_accounts
@@ -134,17 +134,17 @@ def scan() -> None:
         
         console.print("Phase 2/3: Loading ML model and computing batch features...")
         df_features = extract_features(session, transactions)
-        detector = ClassicalAnomalyDetector.load()
+        detector = EnsembleAnomalyDetector.load()
         ml_flags = {}
         if detector and not df_features.empty:
-            is_anomaly_series = detector.predict(df_features)
-            for tx_id, is_anom in zip(df_features["transaction_id"], is_anomaly_series):
-                if is_anom:
+            prob_series = detector.predict(df_features)
+            for tx_id, prob in zip(df_features["transaction_id"], prob_series):
+                if prob > 0.65: # High confidence threshold for flag
                     ml_flags[tx_id] = Flag(
                         transaction_id=tx_id,
                         account_id="", # Will be set below
-                        rule_name="ml_anomaly",
-                        reason="Transaction flagged by Isolation Forest ML model",
+                        rule_name="ml_ensemble",
+                        reason=f"Transaction flagged by ML Ensemble (confidence: {prob:.2f})",
                         severity="high"
                     )
         else:
@@ -180,7 +180,7 @@ def scan() -> None:
                 flags = [ml_flag]
                 session.add(ml_flag)
                 total_flags += 1
-                rule_counts["ml_anomaly"] = rule_counts.get("ml_anomaly", 0) + 1
+                rule_counts["ml_ensemble"] = rule_counts.get("ml_ensemble", 0) + 1
                 score = score_transaction(tx.transaction_id, tx.account_id, flags, settings)
                 session.add(score)
                 
@@ -240,11 +240,11 @@ def train() -> None:
         console.print("[red]No transactions available for training.[/red]")
         return
         
-    console.print(f"Training Isolation Forest on {len(df_features)} transactions...")
-    detector = ClassicalAnomalyDetector()
-    detector.train(df_features)
+    console.print(f"Training Ensemble Detector on {len(df_features)} transactions...")
+    detector = EnsembleAnomalyDetector()
+    detector.train(df_features) # Unsupervised only in CLI
     detector.save()
-    console.print("[green]Training complete. Model persisted to models/iso_forest.joblib.[/green]")
+    console.print("[green]Training complete. Model persisted to models/ensemble.joblib.[/green]")
 
 if __name__ == "__main__":
     app()

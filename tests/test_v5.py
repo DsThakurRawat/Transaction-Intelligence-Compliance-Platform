@@ -7,7 +7,7 @@ from sklearn.model_selection import train_test_split
 
 from store.models import Transaction, Score
 from analyze.features import extract_features
-from analyze.ml import ClassicalAnomalyDetector, evaluate_supervised
+from analyze.ml import EnsembleAnomalyDetector, evaluate_supervised
 from analyze.baselines import compute_baselines
 from tests.test_v2_and_v3 import db_session_factory, setup_data
 
@@ -32,10 +32,10 @@ def test_feature_correctness_and_no_leakage(setup_data, db_session_factory):
 
 def test_ml_lifecycle_and_graceful_degradation(setup_data, db_session_factory, tmp_path):
     """Test train, save, load, and graceful degradation."""
-    model_path = str(tmp_path / "iso_forest.joblib")
+    model_path = str(tmp_path / "ensemble.joblib")
     
     # Graceful degradation (no model)
-    loaded_empty = ClassicalAnomalyDetector.load(model_path)
+    loaded_empty = EnsembleAnomalyDetector.load(model_path)
     assert loaded_empty is None
     
     with db_session_factory() as session:
@@ -43,19 +43,19 @@ def test_ml_lifecycle_and_graceful_degradation(setup_data, db_session_factory, t
         df_features = extract_features(session)
         
     # Train & Save
-    detector = ClassicalAnomalyDetector(random_state=42)
-    detector.train(df_features)
+    detector = EnsembleAnomalyDetector(random_state=42)
+    detector.train(df_features) # No labels
     detector.save(model_path)
     
     assert os.path.exists(model_path)
     
     # Load & Score
-    loaded_model = ClassicalAnomalyDetector.load(model_path)
+    loaded_model = EnsembleAnomalyDetector.load(model_path)
     assert loaded_model is not None
     preds = loaded_model.predict(df_features)
     
     assert len(preds) == len(df_features)
-    assert preds.dtype == bool
+    assert preds.min() >= 0.0 and preds.max() <= 1.0
 
 def test_evaluation_metrics_and_lift(setup_data, db_session_factory):
     """
@@ -78,10 +78,20 @@ def test_evaluation_metrics_and_lift(setup_data, db_session_factory):
     df_train = df_merged[df_merged['account_id'].isin(train_accs)]
     df_test = df_merged[df_merged['account_id'].isin(test_accs)]
     
-    # Isolation Forest Lift Check on Test Set
-    detector = ClassicalAnomalyDetector(random_state=42)
-    detector.train(df_train)
-    iso_preds = detector.predict(df_test)
+    # Ensemble Lift Check on Test Set
+    detector = EnsembleAnomalyDetector(random_state=42)
+    detector.train(df_train, y_train=df_train['is_anomaly'])
+    
+    ensemble_probs = detector.predict(df_test)
+    
+    # Let's print individual member performance vs ensemble for the bake-off artifact
+    iso_probs = detector.iso_scaler.transform(-detector.iso_forest.decision_function(df_test[detector.feature_columns]).reshape(-1, 1)).flatten()
+    booster_probs = detector.booster.predict_proba(df_test[detector.feature_columns])[:, 1]
+    
+    from sklearn.metrics import average_precision_score
+    print(f"Iso Forest PR-AUC: {average_precision_score(df_test['is_anomaly'], iso_probs):.3f}")
+    print(f"Gradient Boosting PR-AUC: {average_precision_score(df_test['is_anomaly'], booster_probs):.3f}")
+    print(f"Ensemble PR-AUC: {average_precision_score(df_test['is_anomaly'], ensemble_probs):.3f}")
     
     # Compare with Rule-Based Score
     # We will simulate the Rules Score by aggregating the rule engine output
@@ -91,11 +101,11 @@ def test_evaluation_metrics_and_lift(setup_data, db_session_factory):
         
     df_test['rule_score'] = df_test['transaction_id'].map(score_map).fillna(0)
     df_test['rule_is_anomaly'] = df_test['rule_score'] >= 50 # Let's say >= 50 is an anomaly
-    df_test['ml_is_anomaly'] = iso_preds.values
+    df_test['ml_is_anomaly'] = ensemble_probs > 0.65
     
     # Combine rules + ML (simulate config weighting)
-    # E.g. ml_is_anomaly adds 30 points to score
-    df_test['combined_score'] = df_test['rule_score'] + df_test['ml_is_anomaly'] * 30
+    # E.g. ml_ensemble adds 40 points to score
+    df_test['combined_score'] = df_test['rule_score'] + df_test['ml_is_anomaly'] * 40
     df_test['combined_is_anomaly'] = df_test['combined_score'] >= 50
     
     true_anoms = df_test['is_anomaly'] == True

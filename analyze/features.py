@@ -18,15 +18,27 @@ def extract_features(session: Session, transactions: list[Transaction] = None) -
     if not transactions:
         return pd.DataFrame()
 
+    # Build DataFrame of all transactions for vectorized graph/velocity features
+    df_all = pd.DataFrame([{
+        "transaction_id": t.transaction_id,
+        "account_id": t.account_id,
+        "merchant": t.merchant,
+        "timestamp": t.timestamp,
+        "amount": float(t.amount)
+    } for t in transactions])
+    
+    # Graph features: Bipartite network (Account -> Merchant)
+    account_fan_out = df_all.groupby('account_id')['merchant'].nunique().to_dict()
+    merchant_fan_in = df_all.groupby('merchant')['account_id'].nunique().to_dict()
+    
+    # Precompute global median for peer/population comparison
+    global_median = df_all['amount'].median() if not df_all.empty else 0.0
+
     # Load baselines
     baselines = session.scalars(select(AccountBaseline)).all()
     baseline_map = {b.account_id: b for b in baselines}
     
     features_list = []
-    
-    # Precompute global median for peer/population comparison
-    all_amounts = [float(tx.amount) for tx in transactions]
-    global_median = float(np.median(all_amounts)) if all_amounts else 0.0
 
     for tx in transactions:
         b = baseline_map.get(tx.account_id)
@@ -52,6 +64,10 @@ def extract_features(session: Session, transactions: list[Transaction] = None) -
         # Peer feature
         vs_global_median = amount / global_median if global_median > 0 else 0.0
         
+        # Graph features
+        fan_out = account_fan_out.get(tx.account_id, 0)
+        fan_in = merchant_fan_in.get(tx.merchant, 0)
+        
         features_list.append({
             "transaction_id": tx.transaction_id,
             "account_id": tx.account_id,
@@ -64,6 +80,8 @@ def extract_features(session: Session, transactions: list[Transaction] = None) -
             "is_new_mcc": is_new_mcc,
             "tx_count": tx_count,
             "vs_global_median": vs_global_median,
+            "account_fan_out": fan_out,
+            "merchant_fan_in": fan_in,
             "channel": tx.channel,
             "mcc": tx.merchant_category
         })
