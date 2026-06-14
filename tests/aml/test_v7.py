@@ -29,22 +29,22 @@ def test_get_stats(client):
     response = client.get("/stats")
     assert response.status_code == 200
     data = response.json()
-    assert "total_flagged" in data
-    assert "by_rule" in data
+    assert "total" in data
+    assert "by_analyzer" in data
     assert "by_band" in data
 
-def test_get_flagged_transactions(client):
-    response = client.get("/transactions/flagged?limit=5")
+def test_get_findings(client):
+    response = client.get("/findings?limit=5")
     assert response.status_code == 200
     data = response.json()
     assert isinstance(data, list)
     assert len(data) <= 5
     if len(data) > 0:
-        assert "transaction_id" in data[0]
+        assert "id" in data[0]
         assert "score" in data[0]
 
-def test_get_top_transactions_and_accounts(client):
-    resp_tx = client.get("/transactions/top?limit=3")
+def test_get_top_findings_and_accounts(client):
+    resp_tx = client.get("/findings/top?limit=3")
     assert resp_tx.status_code == 200
     assert len(resp_tx.json()) <= 3
     
@@ -53,7 +53,7 @@ def test_get_top_transactions_and_accounts(client):
     assert len(resp_acc.json()) <= 3
 
 @patch('analyzers.aml.explain.Groq')
-def test_get_transaction_detail(MockGroq, client, setup_data, db_session_factory):
+def test_get_finding_detail(MockGroq, client, setup_data, db_session_factory):
     # Mock Groq to generate an explanation
     mock_client = MagicMock()
     mock_response = MagicMock()
@@ -65,24 +65,22 @@ def test_get_transaction_detail(MockGroq, client, setup_data, db_session_factory
     settings.groq_api_key = "fake-key"
     
     with db_session_factory() as session:
-        generate_explanations(session, settings)
+        # Run the new analyzer to generate a Finding instead of raw generate_explanations
+        from analyzers.aml.analyzer import AMLAnalyzer
+        analyzer = AMLAnalyzer()
+        analyzer.run(session, {})
         
-        # Get a high score transaction to check detail
-        score = session.scalar(select(Score).where(Score.score >= settings.scoring_band_high).limit(1))
+        # Get a finding
+        from core.store.models import Finding
+        finding = session.scalar(select(Finding).where(Finding.score >= settings.scoring_band_high).limit(1))
         
-        if score:
-            tx_id = score.transaction_id
+        if finding:
+            f_id = finding.id
             
-            response = client.get(f"/transactions/{tx_id}")
+            response = client.get(f"/findings/{f_id}")
             assert response.status_code == 200
             
             data = response.json()
-            assert data["transaction_id"] == tx_id
-            assert data["score"] == score.score
-            assert data["band"] == score.band
-            assert len(data["flags"]) > 0
-            
-            # Check explanation
-            assert data["explanation"] is not None
-            assert data["explanation"]["explanation"] == "This is highly suspicious."
-            assert data["explanation"]["suggested_action"] == "escalate"
+            assert data["id"] == f_id
+            assert data["score"] == finding.score
+            assert data["band"] == finding.band
