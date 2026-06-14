@@ -1,6 +1,6 @@
 from typing import List
-from config import Settings
-from store.models import Flag, Score
+from core.config import Settings
+from core.store.models import Flag, Score
 
 def determine_band(score: int, settings: Settings) -> str:
     if score < settings.scoring_band_low:

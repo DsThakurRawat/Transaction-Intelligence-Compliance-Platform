@@ -1,14 +1,14 @@
 import pytest
 from sqlalchemy import select
-from store.db import make_engine, Base
+from core.store.db import make_engine, Base
 from sqlalchemy.orm import sessionmaker
-from store.models import Transaction, Flag
-from data.generator import generate_profiles, generate_normal_transactions
+from core.store.models import Transaction, Flag
+from data.transactions import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
-from analyze.rules import engine as rule_engine
-from analyze.scoring import score_transaction
-from analyze.baselines import compute_baselines
-from config import get_settings
+from analyzers.aml.rules import engine as rule_engine
+from analyzers.aml.scoring import score_transaction
+from analyzers.aml.baselines import compute_baselines
+from core.config import get_settings
 
 @pytest.fixture(scope="module")
 def db_session_factory(tmp_path_factory):
@@ -136,9 +136,9 @@ import pytest
 import pandas as pd
 from sqlalchemy import select, func
 
-from store.models import Transaction, Flag, Score
-from analyze.scoring import score_transaction
-from config import get_settings
+from core.store.models import Transaction, Flag, Score
+from analyzers.aml.scoring import score_transaction
+from core.config import get_settings
 
 def test_score_calculation_logic():
     """Verify capped weighted sum, severity ordering, and band mapping work correctly."""
@@ -206,7 +206,7 @@ def test_scan_idempotency_and_precision_preview(setup_data, db_session_factory):
         assert score_count == flagged_tx_count, "Score count should exactly match number of unique flagged transactions."
         
         # Check precision preview
-        from store.queries import get_top_transactions
+        from core.store.queries import get_top_transactions
         top_txs = get_top_transactions(session, limit=20)
         
         # Get true anomaly labels from dataframe
@@ -218,7 +218,7 @@ def test_scan_idempotency_and_precision_preview(setup_data, db_session_factory):
         assert precision > 0.5, f"Top-20 precision is too low: {precision}"
         
         # Check get_top_accounts to prevent regression
-        from store.queries import get_top_accounts
+        from core.store.queries import get_top_accounts
         top_accs = get_top_accounts(session, limit=10)
         assert len(top_accs) > 0, "No accounts returned from get_top_accounts"
         # Each tuple should be (account_id, max_score, critical_count)

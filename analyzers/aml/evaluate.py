@@ -4,10 +4,10 @@ import numpy as np
 from sqlalchemy import select
 from sklearn.metrics import precision_score, recall_score, f1_score, average_precision_score
 
-from store.db import SessionLocal
-from store.models import Score
-from store.queries import compute_summary
-from config import get_settings
+from core.store.db import SessionLocal
+from core.store.models import Score
+from core.store.queries import compute_summary
+from core.config import get_settings
 
 def generate_scorecard(df_test: pd.DataFrame, rules_only_score: pd.Series, ensemble_score: pd.Series, output_path: str = "SCORECARD.md"):
     """

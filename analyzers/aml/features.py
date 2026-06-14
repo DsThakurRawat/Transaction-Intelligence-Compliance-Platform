@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from store.models import Transaction, AccountBaseline
+from core.store.models import Transaction, AccountBaseline
 
 def extract_features(session: Session, transactions: list[Transaction] = None) -> pd.DataFrame:
     """

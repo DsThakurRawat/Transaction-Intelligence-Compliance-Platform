@@ -4,11 +4,11 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import select
 
-from tests.test_v2_and_v3 import db_session_factory, setup_data
-from analyze.evaluate import generate_scorecard
-from analyze.features import extract_features
-from analyze.ml import EnsembleAnomalyDetector
-from analyze.baselines import compute_baselines
+from tests.aml.test_v2_and_v3 import db_session_factory, setup_data
+from analyzers.aml.evaluate import generate_scorecard
+from analyzers.aml.features import extract_features
+from analyzers.aml.ml import EnsembleAnomalyDetector
+from analyzers.aml.baselines import compute_baselines
 
 def test_generate_scorecard(setup_data, db_session_factory, tmp_path):
     with db_session_factory() as session:
@@ -51,7 +51,7 @@ def test_generate_scorecard(setup_data, db_session_factory, tmp_path):
     
     # Rules-only score from DB
     with db_session_factory() as session:
-        from store.models import Score
+        from core.store.models import Score
         scores = session.scalars(select(Score)).all()
         score_map = {s.transaction_id: float(s.score) for s in scores}
         

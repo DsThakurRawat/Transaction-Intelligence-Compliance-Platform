@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from sqlalchemy import func, select, case
 from sqlalchemy.orm import Session
-from store.models import Transaction, Score
+from core.store.models import Transaction, Score
 
 
 @dataclass

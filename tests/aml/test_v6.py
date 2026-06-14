@@ -2,11 +2,11 @@ import pytest
 from unittest.mock import MagicMock, patch
 from sqlalchemy import select
 
-from store.models import Score, Explanation
-from tests.test_v2_and_v3 import db_session_factory, setup_data
-from analyze.explain import generate_explanations
-from config import get_settings
-from analyze.baselines import compute_baselines
+from core.store.models import Score, Explanation
+from tests.aml.test_v2_and_v3 import db_session_factory, setup_data
+from analyzers.aml.explain import generate_explanations
+from core.config import get_settings
+from analyzers.aml.baselines import compute_baselines
 
 def test_explain_graceful_degradation(setup_data, db_session_factory):
     """Test that missing GROQ_API_KEY degrades gracefully without crashing."""
@@ -21,7 +21,7 @@ def test_explain_graceful_degradation(setup_data, db_session_factory):
         exps = session.scalars(select(Explanation)).all()
         assert len(exps) == 0
 
-@patch('analyze.explain.Groq')
+@patch('analyzers.aml.explain.Groq')
 def test_explain_generation_and_idempotency(MockGroq, setup_data, db_session_factory):
     """Test that the LLM is called and explanations are saved for high scores."""
     

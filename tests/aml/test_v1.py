@@ -1,5 +1,5 @@
 import pytest
-from data.generator import generate_profiles, generate_normal_transactions
+from data.transactions import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
 
 def build(seed: int):

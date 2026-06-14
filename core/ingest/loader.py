@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from data.schema import TransactionBase
-from store.models import Transaction
+from core.store.models import Transaction
 
 
 @dataclass

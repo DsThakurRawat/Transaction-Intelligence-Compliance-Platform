@@ -3,21 +3,15 @@ from pathlib import Path
 import typer
 from rich.console import Console
 from rich.table import Table
-from data.loader import ingest_csv
-from store.db import SessionLocal, init_db
-from data.generator import generate_profiles, generate_normal_transactions
+from core.ingest.loader import ingest_csv
+from core.store.db import SessionLocal, init_db
+from data.transactions import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
-from data.adapter import map_kaggle_dataset
-from analyze.rules import engine as rule_engine
-from analyze.scoring import score_transaction
-from analyze.baselines import compute_baselines
-from analyze.features import extract_features
-from analyze.ml import EnsembleAnomalyDetector
-from analyze.explain import generate_explanations
-from config import get_settings
-from store.models import Transaction, Flag, Score
-from store.queries import compute_summary, get_top_transactions, get_top_accounts
+from core.ingest.adapters import map_kaggle_dataset
+from core.store.queries import compute_summary, get_top_transactions, get_top_accounts
 from sqlalchemy import select, delete
+from core.pipeline import run_analyzer
+import analyzers.aml.analyzer
 
 app = typer.Typer(help="Transaction-and-AML-Detection-System")
 console = Console()
@@ -113,92 +107,18 @@ def import_real(
 
 
 @app.command()
-def scan(explain: bool = False) -> None:
-    """Run rule-based detection on stored transactions and persist flags."""
+def run(analyzer: str = typer.Argument(..., help="Name of the analyzer to run (e.g. 'aml')")) -> None:
+    """Run an analyzer by name."""
     init_db()
     with SessionLocal() as session:
-        # Clear prior flags and scores to ensure idempotency
-        session.execute(delete(Flag))
-        session.execute(delete(Score))
-        
-        # Get all transactions
-        # In a real system, we'd paginate or filter by unscanned.
-        stmt = select(Transaction).order_by(Transaction.timestamp)
-        transactions = session.scalars(stmt).all()
-        
-        if not transactions:
-            console.print("[yellow]No transactions to scan. Run `ingest` first.[/yellow]")
-            return
-            
-        console.print("Phase 1/3: Computing per-account behavioral baselines...")
-        compute_baselines(session)
-        
-        console.print("Phase 2/3: Loading ML model and computing batch features...")
-        df_features = extract_features(session, transactions)
-        detector = EnsembleAnomalyDetector.load()
-        ml_flags = {}
-        if detector and not df_features.empty:
-            prob_series = detector.predict(df_features)
-            for tx_id, prob in zip(df_features["transaction_id"], prob_series):
-                if prob > 0.65: # High confidence threshold for flag
-                    ml_flags[tx_id] = Flag(
-                        transaction_id=tx_id,
-                        account_id="", # Will be set below
-                        rule_name="ml_ensemble",
-                        reason=f"Transaction flagged by ML Ensemble (confidence: {prob:.2f})",
-                        severity="high"
-                    )
-        else:
-            console.print("[yellow]No ML model found or empty features. Degrading gracefully to rules-only mode.[/yellow]")
-            
-        settings = get_settings()
-        console.print(f"Phase 3/3: Scanning {len(transactions)} transactions with rules...")
-        
-        total_flags = 0
-        rule_counts = {}
-        
-        for tx in transactions:
-            flags = rule_engine.evaluate_transaction(tx, session)
-            if flags:
-                # Add ml flag if exists
-                ml_flag = ml_flags.get(tx.transaction_id)
-                if ml_flag:
-                    ml_flag.account_id = tx.account_id
-                    flags.append(ml_flag)
-                    
-                session.add_all(flags)
-                total_flags += len(flags)
-                for f in flags:
-                    rule_counts[f.rule_name] = rule_counts.get(f.rule_name, 0) + 1
-                    
-                score = score_transaction(tx.transaction_id, tx.account_id, flags, settings)
-                session.add(score)
-                    
-            elif tx.transaction_id in ml_flags:
-                # Only ML flagged it
-                ml_flag = ml_flags[tx.transaction_id]
-                ml_flag.account_id = tx.account_id
-                flags = [ml_flag]
-                session.add(ml_flag)
-                total_flags += 1
-                rule_counts["ml_ensemble"] = rule_counts.get("ml_ensemble", 0) + 1
-                score = score_transaction(tx.transaction_id, tx.account_id, flags, settings)
-                session.add(score)
-                
-        session.commit()
-        
-        if explain:
-            console.print("Phase 4: Generating LLM explanations for high-risk flags...")
-            generate_explanations(session, settings)
-        
-    console.print(f"[green]Scan complete! Generated {total_flags} flags.[/green]")
-    if rule_counts:
-        table = Table(title="Flags by Rule")
-        table.add_column("Rule")
-        table.add_column("Count", justify="right")
-        for rule, count in rule_counts.items():
-            table.add_row(rule, str(count))
-        console.print(table)
+        try:
+            console.print(f"Running analyzer '{analyzer}'...")
+            result = run_analyzer(analyzer, session, {})
+            console.print(f"[green]Analyzer completed: {result.message}[/green]")
+        except KeyError:
+            console.print(f"[red]Analyzer '{analyzer}' not found.[/red]")
+        except Exception as e:
+            console.print(f"[red]Error running analyzer: {str(e)}[/red]")
 
 
 @app.command()
@@ -274,7 +194,7 @@ def evaluate() -> None:
     import subprocess
     import sys
     
-    result = subprocess.run([sys.executable, "-m", "pytest", "tests/test_v8.py", "-s", "-q"], capture_output=True, text=True)
+    result = subprocess.run([sys.executable, "-m", "pytest", "tests/aml/test_v8.py", "-s", "-q"], capture_output=True, text=True)
     if result.returncode == 0:
         console.print("[green]Scorecard successfully generated at SCORECARD.md[/green]")
         try:
@@ -286,6 +206,44 @@ def evaluate() -> None:
         console.print("[red]Evaluation failed![/red]")
         console.print(result.stdout)
         console.print(result.stderr)
+
+
+@app.command()
+def findings(
+    analyzer: str = typer.Option(None, help="Filter by analyzer name"),
+    status: str = typer.Option(None, help="Filter by status (open, needs_review, resolved)"),
+    limit: int = typer.Option(10, help="Number of findings to display"),
+) -> None:
+    """View the unified findings review queue."""
+    from core.store.models import Finding
+    init_db()
+    with SessionLocal() as session:
+        stmt = select(Finding).order_by(Finding.created_at.desc())
+        if analyzer:
+            stmt = stmt.where(Finding.analyzer == analyzer)
+        if status:
+            stmt = stmt.where(Finding.status == status)
+            
+        findings = session.scalars(stmt.limit(limit)).all()
+        
+    table = Table(title="Findings Review Queue")
+    table.add_column("ID")
+    table.add_column("Analyzer")
+    table.add_column("Entity")
+    table.add_column("Status")
+    table.add_column("Score")
+    table.add_column("Summary")
+    
+    for f in findings:
+        table.add_row(
+            f.id[:8],
+            f.analyzer,
+            f"{f.entity_type}:{f.entity_id[:8]}",
+            f.status,
+            f"{f.score:.0f}" if f.score else "-",
+            f.summary
+        )
+    console.print(table)
 
 if __name__ == "__main__":
     app()

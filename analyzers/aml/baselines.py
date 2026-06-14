@@ -1,7 +1,7 @@
 import pandas as pd
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
-from store.models import Transaction, AccountBaseline
+from core.store.models import Transaction, AccountBaseline
 
 def compute_baselines(session: Session) -> None:
     """

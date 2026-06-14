@@ -5,7 +5,7 @@ from datetime import timedelta
 import pandas as pd
 import numpy as np
 
-from config import get_settings
+from core.config import get_settings
 
 def inject_fraud_large_amount(df: pd.DataFrame, index: int, py_rng: random.Random, multiplier: float = 20.0):
     new_amt = round(df.at[index, 'amount'] * multiplier, 2)

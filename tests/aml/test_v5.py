@@ -5,11 +5,11 @@ import pandas as pd
 from sqlalchemy import select
 from sklearn.model_selection import train_test_split
 
-from store.models import Transaction, Score
-from analyze.features import extract_features
-from analyze.ml import EnsembleAnomalyDetector, evaluate_supervised
-from analyze.baselines import compute_baselines
-from tests.test_v2_and_v3 import db_session_factory, setup_data
+from core.store.models import Transaction, Score
+from analyzers.aml.features import extract_features
+from analyzers.aml.ml import EnsembleAnomalyDetector, evaluate_supervised
+from analyzers.aml.baselines import compute_baselines
+from tests.aml.test_v2_and_v3 import db_session_factory, setup_data
 
 def test_feature_correctness_and_no_leakage(setup_data, db_session_factory):
     """Ensure features extract properly without NaNs/infs and contain no target leakage."""

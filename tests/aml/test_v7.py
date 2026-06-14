@@ -3,11 +3,11 @@ from fastapi.testclient import TestClient
 from unittest.mock import patch, MagicMock
 from sqlalchemy import select
 
-from store.models import Score, Explanation
+from core.store.models import Score, Explanation
 from interface.api import app, get_db
-from tests.test_v2_and_v3 import db_session_factory, setup_data
-from analyze.explain import generate_explanations
-from config import get_settings
+from tests.aml.test_v2_and_v3 import db_session_factory, setup_data
+from analyzers.aml.explain import generate_explanations
+from core.config import get_settings
 
 @pytest.fixture
 def client(setup_data, db_session_factory):
@@ -52,7 +52,7 @@ def test_get_top_transactions_and_accounts(client):
     assert resp_acc.status_code == 200
     assert len(resp_acc.json()) <= 3
 
-@patch('analyze.explain.Groq')
+@patch('analyzers.aml.explain.Groq')
 def test_get_transaction_detail(MockGroq, client, setup_data, db_session_factory):
     # Mock Groq to generate an explanation
     mock_client = MagicMock()

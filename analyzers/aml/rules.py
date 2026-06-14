@@ -4,8 +4,8 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
 from decimal import Decimal
-from store.models import Transaction, Flag, AccountBaseline
-from config import get_settings, Settings
+from core.store.models import Transaction, Flag, AccountBaseline
+from core.config import get_settings, Settings
 
 class RuleFlag:
     def __init__(self, rule_name: str, reason: str, severity: str):

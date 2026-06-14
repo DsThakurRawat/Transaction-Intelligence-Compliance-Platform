@@ -75,3 +75,44 @@ class Explanation(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
+
+# --- Platform Shared Models ---
+
+class AnalyzerRun(Base):
+    __tablename__ = "analyzer_runs"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    analyzer_name: Mapped[str] = mapped_column(String)
+    status: Mapped[str] = mapped_column(String) # running, completed, failed
+    message: Mapped[str | None] = mapped_column(String, nullable=True)
+    findings_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+class Finding(Base):
+    __tablename__ = "findings"
+    
+    id: Mapped[str] = mapped_column(String, primary_key=True) # UUID
+    analyzer: Mapped[str] = mapped_column(String, index=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("analyzer_runs.id"), nullable=True)
+    entity_type: Mapped[str] = mapped_column(String) # e.g. transaction, account
+    entity_id: Mapped[str] = mapped_column(String, index=True)
+    finding_type: Mapped[str] = mapped_column(String)
+    score: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    band: Mapped[str | None] = mapped_column(String, nullable=True)
+    status: Mapped[str] = mapped_column(String, default="open") # open, needs_review, resolved
+    summary: Mapped[str] = mapped_column(String)
+    explanation: Mapped[str | None] = mapped_column(String, nullable=True)
+    payload_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+    
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    entity_type: Mapped[str] = mapped_column(String)
+    entity_id: Mapped[str] = mapped_column(String)
+    action: Mapped[str] = mapped_column(String)
+    user: Mapped[str] = mapped_column(String, default="system")
+    details: Mapped[str] = mapped_column(String)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
