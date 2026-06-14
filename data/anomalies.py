@@ -92,6 +92,12 @@ def inject_anomalies(df: pd.DataFrame, anomaly_rate: float, seed: int) -> pd.Dat
     available_indices = list(range(len(df)))
     py_rng.shuffle(available_indices)
     
+    account_counts = df['account_id'].value_counts()
+    valid_history_accounts = account_counts[account_counts >= 10].index
+    valid_history_indices = set(df[df['account_id'].isin(valid_history_accounts)].index.tolist())
+    
+    geo_injected_accounts = set()
+    
     extra_rows = []
     
     for idx in available_indices:
@@ -101,6 +107,14 @@ def inject_anomalies(df: pd.DataFrame, anomaly_rate: float, seed: int) -> pd.Dat
         anomaly_type = py_rng.choice([
             "large_amount", "velocity_fraud", "geo_anomaly", "structuring"
         ])
+        
+        # Guard: geo_anomaly and amount deviation features require >= 10 history
+        if anomaly_type == "geo_anomaly":
+            acc_id = df.at[idx, 'account_id']
+            if idx not in valid_history_indices or acc_id in geo_injected_accounts:
+                anomaly_type = py_rng.choice(["large_amount", "velocity_fraud", "structuring"])
+            else:
+                geo_injected_accounts.add(acc_id)
         
         if anomaly_type == "large_amount":
             inject_fraud_large_amount(df, idx, py_rng)

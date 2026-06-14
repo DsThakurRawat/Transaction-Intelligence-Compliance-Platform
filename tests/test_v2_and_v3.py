@@ -19,7 +19,7 @@ def db_session_factory(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def setup_data(db_session_factory):
-    profiles = generate_profiles(50, seed=101)
+    profiles = generate_profiles(100, seed=101)
     df_normal = generate_normal_transactions(profiles, days=30, seed=101)
     df_final = inject_anomalies(df_normal, anomaly_rate=0.20, seed=101)
     

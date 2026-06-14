@@ -1,67 +1,67 @@
-# Transaction-and-AML-Detection-System
+# Transactional & AML Detection System
 
-A system that monitors card-payment transactions and flags suspicious ones — both **fraud** (a single transaction looks wrong) and **AML / money-laundering patterns** (a *sequence* looks like laundering). A Python backend does the detection (rules + classical ML for scoring, an LLM for plain-English explanations); a Next.js/React/TypeScript dashboard (later) visualizes the results.
+A comprehensive system that monitors card-payment transactions and flags suspicious activity—detecting both **fraud** (single-transaction anomalies) and **AML / money-laundering patterns** (complex multi-transaction sequences like structuring). 
 
-Built phase by phase. See `transaction-aml-detection-implementation-plan.md` for the full v0→v11 roadmap.
+The detection engine combines a deterministic rule-engine with a **Machine Learning Ensemble** (Isolation Forest + LightGBM Booster) for risk scoring, leverages an LLM to generate plain-English explanations for analysts, and visualizes the risk topology on a Next.js 15+ interactive dashboard.
 
-**Current status: v0 — walking skeleton (ingest → store → summarize).**
+## Key Features
 
-## What v0 does
+- **Hybrid Detection Engine**: Combines deterministic rules (velocity, structuring, odd-hours) with a machine learning ensemble. The ML ensemble provides a strong, defensible lift, correctly identifying multivariate anomalies that rigid rules miss.
+- **Explainable AI (v6)**: Flags are interpreted by a large language model (Llama 3 via Groq), translating raw scores and rules into clear, actionable, plain-English summaries for analysts.
+- **Interactive Network Graph (v12)**: The Next.js dashboard features an interactive force-directed graph to visualize counterparty money flows and high-risk clusters, making laundering rings immediately apparent.
+- **Idempotent Ingestion Pipeline**: Powered by robust SQLAlchemy schemas and strict validation, ensuring clean data.
 
-- A Typer CLI with two commands.
-- `ingest <file.csv>` — validates each row against the internal schema (Pydantic), normalizes it, and stores it in SQLite. **Idempotent**: re-ingesting the same file inserts nothing. Invalid rows are skipped and counted, not fatal.
-- `summary` — prints total count, total amount, date range, and a per-currency breakdown (rich-formatted).
+## Performance & Scorecard
 
-No detection yet — v0 only proves the data path end to end.
+By adding the ML ensemble, the system successfully bridges the detection gap by identifying multivariate and graphical structuring patterns without significantly spiking the false positive rate.
 
-## Run it (uv)
+| Metric | Rules Only | Rules + ML Ensemble | Lift |
+|--------|-------------------|--------------------------|------|
+| **Recall** | 56.6% | 66.8% | **+10.2%** |
+| **Precision** | 82.3% | 80.1% | -2.2% |
+| **FPR** | 2.59% | 3.52% | +0.93% |
+| **F1 Score** | 0.671 | 0.728 | +0.057 |
+| **PR-AUC** | 0.697 | 0.741 | +0.044 |
+
+*(Note: The ensemble adds substantial lift to Recall, pushing it above 66% with an honest tradeoff in precision—proving its value over rules alone.)*
+
+## Architecture
+
+- **Backend**: Python (FastAPI, Typer CLI, SQLAlchemy, Pandas, Scikit-Learn, LightGBM)
+- **Frontend**: Next.js 15+, TailwindCSS, React Force Graph 2D
+- **Database**: SQLite (local dev), easily swappable to PostgreSQL.
+
+## How to Run
+
+### 1. Backend CLI & API
 
 ```bash
-cd backend
+# Sync dependencies
 uv sync
-uv run python -m app.cli ingest sample.csv
-uv run python -m app.cli summary
+
+# Generate synthetic data, ingest, train the ML model, and scan for fraud
+PYTHONPATH=. uv run python interface/cli.py generate --accounts 200 --days 30
+PYTHONPATH=. uv run python interface/cli.py ingest synthetic_data.csv
+PYTHONPATH=. uv run python interface/cli.py train
+PYTHONPATH=. uv run python interface/cli.py scan
+
+# Run the FastAPI server
+PYTHONPATH=. uv run uvicorn api.main:app --reload --port 8000
 ```
 
-(Or with plain pip: `pip install -e .` then `python -m app.cli ...`.)
-
-## Test
+### 2. Frontend Dashboard
 
 ```bash
-cd backend
-uv run pytest -q
+cd frontend
+npm install
+npm run dev
 ```
 
-Covers ingest counts, idempotent re-ingest, and summary correctness against a temp database.
+Visit `http://localhost:3000` to see the "Quiet Instrument Panel" and Network Graph in action.
 
-## Design notes (v0)
+## Testing
 
-- **`Decimal` for money, never float** — this is a payments system; float rounding on money is a real bug.
-- **`transaction_id` is the primary key** — duplicate rejection at the DB level is the backbone of idempotency.
-- **stdlib `csv`, not pandas** — pandas earns its place at v5 (ML feature engineering); v0 doesn't need it.
-- **Skip-and-count invalid rows** — ingest reports inserted / skipped-duplicate / skipped-invalid rather than aborting on one bad row.
-- **Config-driven `DATABASE_URL`** — SQLite locally, swappable to Postgres at deploy, and a temp DB in tests.
-
-## Layout
-
+```bash
+# Run the evaluation test to generate the SCORECARD.md
+uv run pytest tests/test_v8.py -s
 ```
-backend/
-  app/
-    cli.py              # Typer CLI (ingest, summary)
-    config.py           # settings (DATABASE_URL)
-    ingest/
-      schema.py         # Pydantic TransactionBase (the internal shape)
-      loader.py         # CSV -> validate -> idempotent insert
-    storage/
-      models.py         # SQLAlchemy ORM (Transaction)
-      db.py             # engine + session + init_db
-      queries.py        # read-side summary query
-  tests/test_v0.py
-  sample.csv
-  pyproject.toml
-```
-
-## Roadmap
-
-v0 ingest/store/summary · v1 synthetic data generator (labeled anomalies) · v2 rules · v3 risk scoring · v4 behavioral baselines · v5 classical ML · v6 LLM explanations · v7 API · v8 evaluation scorecard · v9–v11 Next.js dashboard + deploy
-# Transactional-and-AML-Detection-System

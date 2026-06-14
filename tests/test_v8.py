@@ -40,6 +40,15 @@ def test_generate_scorecard(setup_data, db_session_factory, tmp_path):
     # Predict
     ensemble_probs = detector.predict(df_test[feature_cols])
     
+    geo_test_count = df_test[df_test['anomaly_type'] == 'geo_anomaly'].shape[0]
+    print(f"DEBUG: geo_anomaly count in df_test: {geo_test_count}")
+    
+    geo_indices = df_test[df_test['anomaly_type'] == 'geo_anomaly'].index
+    for idx in geo_indices:
+        tx_id = df_test.loc[idx, 'transaction_id']
+        prob = ensemble_probs.loc[idx]
+        print(f"DEBUG geo_anomaly tx {tx_id}: prob={prob}")
+    
     # Rules-only score from DB
     with db_session_factory() as session:
         from store.models import Score

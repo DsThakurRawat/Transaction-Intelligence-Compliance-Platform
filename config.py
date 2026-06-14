@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         "structuring": 40,
         "amount": 25,
         "amount_deviation": 25,
-        "new_country": 25,
+        "new_country": 50,
         "new_mcc": 15,
         "high_risk_mcc": 10,
         "odd_hour": 5,
