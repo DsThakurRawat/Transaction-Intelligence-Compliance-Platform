@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, case
 from sqlalchemy.orm import Session
 from store.models import Transaction, Score
 
@@ -75,7 +75,7 @@ def get_top_accounts(session: Session, limit: int = 10) -> list[tuple[str, int, 
             Score.account_id,
             func.max(Score.score).label("max_score"),
             func.sum(
-                func.case(
+                case(
                     (Score.band == "critical", 1),
                     else_=0
                 )
