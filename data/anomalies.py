@@ -57,10 +57,14 @@ def inject_aml_structuring(df: pd.DataFrame, index: int, py_rng: random.Random) 
     # Generate amounts that are individually close to the reporting threshold
     amounts = [round(py_rng.uniform(threshold * 0.85, threshold * 0.99), 2) for _ in range(num_tx)]
     
+    # All structuring transactions typically go to the same counterparty (mule)
+    target_counterparty = f"acc_{py_rng.randint(9000, 9999):04d}"
+    
     # Mutate the anchor row to be the first of the sequence
     df.at[index, 'amount'] = amounts[0]
     df.at[index, 'is_anomaly'] = True
     df.at[index, 'anomaly_type'] = "structuring"
+    df.at[index, 'counterparty_account'] = target_counterparty
     
     new_rows = []
     base_time = base_row['timestamp']
@@ -71,6 +75,7 @@ def inject_aml_structuring(df: pd.DataFrame, index: int, py_rng: random.Random) 
         new_row['amount'] = amounts[i]
         new_row['is_anomaly'] = True
         new_row['anomaly_type'] = "structuring"
+        new_row['counterparty_account'] = target_counterparty
         new_rows.append(new_row)
     return pd.DataFrame(new_rows)
 

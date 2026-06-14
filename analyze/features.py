@@ -23,13 +23,18 @@ def extract_features(session: Session, transactions: list[Transaction] = None) -
         "transaction_id": t.transaction_id,
         "account_id": t.account_id,
         "merchant": t.merchant,
+        "counterparty": t.counterparty_account,
         "timestamp": t.timestamp,
         "amount": float(t.amount)
     } for t in transactions])
     
-    # Graph features: Bipartite network (Account -> Merchant)
+    # Graph features: Bipartite network (Account -> Merchant) + Counterparty network
     account_fan_out = df_all.groupby('account_id')['merchant'].nunique().to_dict()
     merchant_fan_in = df_all.groupby('merchant')['account_id'].nunique().to_dict()
+    
+    # Counterparty flows (A -> B)
+    cp_fan_out = df_all[df_all['counterparty'].notna()].groupby('account_id')['counterparty'].nunique().to_dict()
+    cp_fan_in = df_all[df_all['counterparty'].notna()].groupby('counterparty')['account_id'].nunique().to_dict()
     
     # Precompute global median for peer/population comparison
     global_median = df_all['amount'].median() if not df_all.empty else 0.0
@@ -68,6 +73,9 @@ def extract_features(session: Session, transactions: list[Transaction] = None) -
         fan_out = account_fan_out.get(tx.account_id, 0)
         fan_in = merchant_fan_in.get(tx.merchant, 0)
         
+        c_fan_out = cp_fan_out.get(tx.account_id, 0)
+        c_fan_in = cp_fan_in.get(tx.counterparty_account, 0) if tx.counterparty_account else 0
+        
         features_list.append({
             "transaction_id": tx.transaction_id,
             "account_id": tx.account_id,
@@ -82,6 +90,8 @@ def extract_features(session: Session, transactions: list[Transaction] = None) -
             "vs_global_median": vs_global_median,
             "account_fan_out": fan_out,
             "merchant_fan_in": fan_in,
+            "counterparty_fan_out": c_fan_out,
+            "counterparty_fan_in": c_fan_in,
             "channel": tx.channel,
             "mcc": tx.merchant_category
         })

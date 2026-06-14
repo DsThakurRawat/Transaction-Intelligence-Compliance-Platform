@@ -27,13 +27,14 @@ def map_kaggle_dataset(input_csv: str, output_csv: str):
     df['merchant_category'] = "0000"
     df['country'] = "US" # Must be 2-letter to pass validation
     df['channel'] = "online"
+    df['counterparty_account'] = None
     
     df['is_anomaly'] = df['Class'].astype(bool)
     df['anomaly_type'] = np.where(df['is_anomaly'], 'real_fraud', 'none')
     
     cols_to_keep = [
         'transaction_id', 'account_id', 'timestamp', 'amount', 'currency',
-        'merchant', 'merchant_category', 'country', 'channel',
+        'merchant', 'merchant_category', 'country', 'channel', 'counterparty_account',
         'is_anomaly', 'anomaly_type'
     ] + [f"V{i}" for i in range(1, 29)]
     

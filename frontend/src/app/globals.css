@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-brand: var(--brand);
+  --color-brand-weak: var(--brand-weak);
+
+  --color-risk-critical: var(--risk-critical);
+  --color-risk-critical-soft: var(--risk-critical-soft);
+  
+  --color-risk-high: var(--risk-high);
+  --color-risk-high-soft: var(--risk-high-soft);
+  
+  --color-risk-medium: var(--risk-medium);
+  --color-risk-medium-soft: var(--risk-medium-soft);
+  
+  --color-risk-low: var(--risk-low);
+  --color-risk-low-soft: var(--risk-low-soft);
+  
+  --color-risk-clean: var(--risk-clean);
+  --color-risk-clean-soft: var(--risk-clean-soft);
+}
+
+:root {
+  /* Light Theme */
+  --bg: #F7F9FC;
+  --surface: #FFFFFF;
+  --surface-2: #F1F4F9;
+  --border: #E3E8F0;
+  --text: #15213B;
+  --text-muted: #5B6B85;
+  --brand: #27406B;
+  --brand-weak: #E8EEF7;
+
+  /* Risk Ramp */
+  --risk-critical: #C2334D;
+  --risk-critical-soft: #FBE9EC;
+  
+  --risk-high: #D86A2C;
+  --risk-high-soft: #FBF0E7;
+  
+  --risk-medium: #C29A2E;
+  --risk-medium-soft: #FAF5E6;
+  
+  --risk-low: #3E7CA8;
+  --risk-low-soft: #EAF2F8;
+  
+  --risk-clean: #2E8B6F;
+  --risk-clean-soft: #E7F4EF;
+  
+  --r-card: 10px;
+  --r-control: 8px;
+  --r-pill: 999px;
+}
+
+html.dark {
+  /* Dark Theme */
+  --bg: #0E1525;
+  --surface: #151E33;
+  --surface-2: #1C2741;
+  --border: #26324F;
+  --text: #E8EDF7;
+  --text-muted: #94A3C0;
+  --brand: #5B82C4;
+  --brand-weak: #1B2A47;
+  
+  --risk-critical-soft: #3A1822;
+  --risk-high-soft: #36241A;
+  --risk-medium-soft: #322B17;
+  --risk-low-soft: #16263A;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.num {
+  font-family: var(--font-mono), monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Base resets for Next.js */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+* {
+  box-sizing: border-box;
+}

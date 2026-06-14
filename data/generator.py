@@ -72,6 +72,13 @@ def generate_normal_transactions(profiles: List[AccountProfile], days: int, seed
             amount = round(amount, 2)
             mcc = py_rng.choice(profile.merchant_categories)
             
+            # 10% chance to be a P2P transfer
+            counterparty = None
+            if py_rng.random() < 0.10:
+                potential_counterparties = [p.account_id for p in profiles if p.account_id != profile.account_id]
+                if potential_counterparties:
+                    counterparty = py_rng.choice(potential_counterparties)
+                    
             rows.append({
                 "transaction_id": str(uuid.UUID(int=py_rng.getrandbits(128))),
                 "account_id": profile.account_id,
@@ -82,6 +89,7 @@ def generate_normal_transactions(profiles: List[AccountProfile], days: int, seed
                 "merchant_category": mcc,
                 "country": profile.country,
                 "channel": py_rng.choice(["online", "pos"]),
+                "counterparty_account": counterparty,
                 "is_anomaly": False,
                 "anomaly_type": "none"
             })

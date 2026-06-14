@@ -54,6 +54,7 @@ class TransactionListResponse(BaseModel):
     amount: float
     currency: str
     merchant: str
+    counterparty_account: Optional[str]
     score: int
     band: str
     flags: List[str]
@@ -68,6 +69,7 @@ class TransactionDetailResponse(BaseModel):
     merchant_category: str
     country: str
     channel: str
+    counterparty_account: Optional[str]
     score: int
     band: str
     flags: List[FlagResponse]
@@ -107,6 +109,7 @@ def get_flagged_transactions(
             amount=float(tx.amount),
             currency=tx.currency,
             merchant=tx.merchant,
+            counterparty_account=tx.counterparty_account,
             score=int(s.score),
             band=s.band,
             flags=[f.rule_name for f in flags]
@@ -198,9 +201,63 @@ def get_transaction_detail(transaction_id: str, db: Session = Depends(get_db)):
         merchant_category=tx.merchant_category,
         country=tx.country,
         channel=tx.channel,
+        counterparty_account=tx.counterparty_account,
         score=int(score.score) if score else 0,
         band=score.band if score else "none",
         flags=[FlagResponse(rule_name=f.rule_name, reason=f.reason, severity=f.severity) for f in flags],
         explanation=exp_resp,
         baseline=base_resp
     )
+
+@app.get("/graph")
+def get_graph_data(limit: int = 500, db: Session = Depends(get_db)):
+    """
+    Returns nodes and edges for the AML network graph.
+    Nodes: Accounts (with risk score and band)
+    Edges: Transfers between accounts (counterparty_account != null)
+    """
+    # Fetch top risky accounts to form the core of the graph
+    scores = db.scalars(select(Score).order_by(desc(Score.score)).limit(limit)).all()
+    target_accounts = {s.account_id for s in scores}
+    
+    # We want transactions where both sides are in our target set OR at least one side is.
+    # For a focused subgraph, we'll fetch all transactions involving these accounts.
+    transactions = db.scalars(
+        select(Transaction).where(
+            (Transaction.account_id.in_(target_accounts)) |
+            (Transaction.counterparty_account.in_(target_accounts))
+        ).where(Transaction.counterparty_account.is_not(None))
+    ).all()
+    
+    # Extract all unique accounts in the edges
+    all_accounts = set()
+    edges = []
+    
+    for tx in transactions:
+        all_accounts.add(tx.account_id)
+        all_accounts.add(tx.counterparty_account)
+        edges.append({
+            "source": tx.account_id,
+            "target": tx.counterparty_account,
+            "amount": float(tx.amount),
+            "transaction_id": tx.transaction_id
+        })
+        
+    # Get scores for all accounts involved
+    all_scores = db.scalars(select(Score).where(Score.account_id.in_(all_accounts))).all()
+    score_map = {s.account_id: s for s in all_scores}
+    
+    nodes = []
+    for acc in all_accounts:
+        s = score_map.get(acc)
+        nodes.append({
+            "id": acc,
+            "score": int(s.score) if s else 0,
+            "risk_band": s.band if s else "none"
+        })
+        
+    return {
+        "nodes": nodes,
+        "edges": edges
+    }
+

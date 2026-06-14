@@ -23,6 +23,7 @@ class Transaction(Base):
     merchant_category: Mapped[str] = mapped_column(String(8))
     country: Mapped[str] = mapped_column(String(2))
     channel: Mapped[str] = mapped_column(String)
+    counterparty_account: Mapped[str | None] = mapped_column(String, nullable=True, index=True)
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )

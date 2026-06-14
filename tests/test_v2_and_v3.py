@@ -36,7 +36,8 @@ def setup_data(db_session_factory):
                 merchant=row["merchant"],
                 merchant_category=row["merchant_category"],
                 country=row["country"],
-                channel=row["channel"]
+                channel=row["channel"],
+                counterparty_account=row.get("counterparty_account")
             )
             tx_objects.append(tx)
         session.add_all(tx_objects)

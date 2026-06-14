@@ -5,21 +5,21 @@
 
 | Metric | Rules Only (v2-v4) | Rules + ML Ensemble (v5) | Lift |
 |--------|-------------------|--------------------------|------|
-| **Recall** | 44.4% | 44.4% | **+0.0%** |
-| **Precision** | 77.6% | 77.6% | +0.0% |
-| **FPR** | 3.11% | 3.11% | +0.00% |
-| **F1 Score** | 0.565 | 0.565 | +0.000 |
-| **PR-AUC** | 0.672 | 0.693 | +0.020 |
+| **Recall** | 51.3% | 63.0% | **+11.8%** |
+| **Precision** | 91.0% | 84.3% | -6.8% |
+| **FPR** | 1.39% | 3.23% | +1.85% |
+| **F1 Score** | 0.656 | 0.721 | +0.065 |
+| **PR-AUC** | 0.746 | 0.788 | +0.042 |
 
 ## Detection Rate by Anomaly Type
 
 | Anomaly Type | Rules Only | Rules + ML |
 |--------------|------------|------------|
 | none | 0.0% | 0.0% |
-| geo_anomaly | 0.0% | 0.0% |
-| velocity_fraud | 16.9% | 16.9% |
 | structuring | 100.0% | 100.0% |
+| velocity_fraud | 34.1% | 50.6% |
 | large_amount | 100.0% | 100.0% |
+| geo_anomaly | 0.0% | 0.0% |
 
     
 ## Context
