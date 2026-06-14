@@ -7,16 +7,15 @@ from typing import Optional, List
 from datetime import datetime
 
 from core.store.db import SessionLocal
-from core.store.models import Transaction, Flag, Score, AccountBaseline, Explanation
-from core.store.queries import get_top_transactions, get_top_accounts, compute_summary
+from core.store.models import Finding
 
 from pydantic import BaseModel
 
-app = FastAPI(title="AML Detection API", version="1.0.0")
+app = FastAPI(title="Platform API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # For demo purposes
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,108 +28,125 @@ def get_db():
     finally:
         db.close()
 
-# Pydantic Models
-class FlagResponse(BaseModel):
-    rule_name: str
-    reason: str
-    severity: str
-    
-class ExplanationResponse(BaseModel):
-    explanation: str
-    suggested_action: str
-    model_used: str
+class FindingResponse(BaseModel):
+    id: str
+    analyzer: str
+    entity_type: str
+    entity_id: str
+    finding_type: str
+    score: Optional[float]
+    band: Optional[str]
+    status: str
+    summary: str
+    explanation: Optional[str]
+    payload_json: Optional[dict]
+    created_at: datetime
 
-class BaselineResponse(BaseModel):
-    tx_count: int
-    amount_median: float
-    amount_mad: float
-    seen_countries: list[str]
-    seen_mccs: list[str]
-
-class TransactionListResponse(BaseModel):
-    transaction_id: str
-    account_id: str
-    timestamp: datetime
-    amount: float
-    currency: str
-    merchant: str
-    counterparty_account: Optional[str]
-    score: int
-    band: str
-    flags: List[str]
-
-class TransactionDetailResponse(BaseModel):
-    transaction_id: str
-    account_id: str
-    timestamp: datetime
-    amount: float
-    currency: str
-    merchant: str
-    merchant_category: str
-    country: str
-    channel: str
-    counterparty_account: Optional[str]
-    score: int
-    band: str
-    flags: List[FlagResponse]
-    explanation: Optional[ExplanationResponse]
-    baseline: Optional[BaselineResponse]
+class StatsResponse(BaseModel):
+    total: int
+    by_analyzer: dict[str, int]
+    by_band: dict[str, int]
+    by_status: dict[str, int]
 
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
 
-@app.get("/transactions/flagged", response_model=List[TransactionListResponse])
-def get_flagged_transactions(
+@app.get("/findings", response_model=List[FindingResponse])
+def get_findings(
+    analyzer: Optional[str] = None,
     band: Optional[str] = None,
-    account_id: Optional[str] = None,
+    status: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    stmt = select(Score).order_by(desc(Score.score))
-    
+    stmt = select(Finding).order_by(desc(Finding.created_at))
+    if analyzer:
+        stmt = stmt.where(Finding.analyzer == analyzer)
     if band:
-        stmt = stmt.where(Score.band == band)
-    if account_id:
-        stmt = stmt.where(Score.account_id == account_id)
+        stmt = stmt.where(Finding.band == band)
+    if status:
+        stmt = stmt.where(Finding.status == status)
         
-    scores = db.scalars(stmt.offset(offset).limit(limit)).all()
+    findings = db.scalars(stmt.offset(offset).limit(limit)).all()
     
-    results = []
-    for s in scores:
-        tx = db.scalar(select(Transaction).where(Transaction.transaction_id == s.transaction_id))
-        flags = db.scalars(select(Flag).where(Flag.transaction_id == s.transaction_id)).all()
-        
-        results.append(TransactionListResponse(
-            transaction_id=s.transaction_id,
-            account_id=s.account_id,
-            timestamp=tx.timestamp,
-            amount=float(tx.amount),
-            currency=tx.currency,
-            merchant=tx.merchant,
-            counterparty_account=tx.counterparty_account,
-            score=int(s.score),
-            band=s.band,
-            flags=[f.rule_name for f in flags]
-        ))
-        
-    return results
+    return [FindingResponse(
+        id=f.id,
+        analyzer=f.analyzer,
+        entity_type=f.entity_type,
+        entity_id=f.entity_id,
+        finding_type=f.finding_type,
+        score=float(f.score) if f.score else None,
+        band=f.band,
+        status=f.status,
+        summary=f.summary,
+        explanation=f.explanation,
+        payload_json=f.payload_json,
+        created_at=f.created_at
+    ) for f in findings]
 
-@app.get("/transactions/top")
-def api_get_top_transactions(limit: int = 10, db: Session = Depends(get_db)):
-    results = get_top_transactions(db, limit)
-    return [
-        {
-            "transaction_id": r.transaction_id,
-            "account_id": r.account_id,
-            "score": int(r.score),
-            "band": r.band
-        } for r in results
-    ]
+@app.get("/findings/top", response_model=List[FindingResponse])
+def get_top_findings(limit: int = 10, db: Session = Depends(get_db)):
+    stmt = select(Finding).order_by(desc(Finding.score)).limit(limit)
+    findings = db.scalars(stmt).all()
+    return [FindingResponse(
+        id=f.id,
+        analyzer=f.analyzer,
+        entity_type=f.entity_type,
+        entity_id=f.entity_id,
+        finding_type=f.finding_type,
+        score=float(f.score) if f.score else None,
+        band=f.band,
+        status=f.status,
+        summary=f.summary,
+        explanation=f.explanation,
+        payload_json=f.payload_json,
+        created_at=f.created_at
+    ) for f in findings]
+
+@app.get("/stats", response_model=StatsResponse)
+def get_finding_stats(db: Session = Depends(get_db)):
+    total = db.scalar(select(func.count(Finding.id)))
+    by_analyzer = dict(db.execute(select(Finding.analyzer, func.count(Finding.id)).group_by(Finding.analyzer)).all())
+    
+    # Handle nullable band
+    by_band_rows = db.execute(select(Finding.band, func.count(Finding.id)).group_by(Finding.band)).all()
+    by_band = {r[0] if r[0] else "none": r[1] for r in by_band_rows}
+    
+    by_status = dict(db.execute(select(Finding.status, func.count(Finding.id)).group_by(Finding.status)).all())
+    
+    return StatsResponse(
+        total=total or 0,
+        by_analyzer=by_analyzer,
+        by_band=by_band,
+        by_status=by_status
+    )
+
+@app.get("/findings/{finding_id}", response_model=FindingResponse)
+def get_finding_detail(finding_id: str, db: Session = Depends(get_db)):
+    f = db.scalar(select(Finding).where(Finding.id == finding_id))
+    if not f:
+        raise HTTPException(status_code=404, detail="Finding not found")
+        
+    return FindingResponse(
+        id=f.id,
+        analyzer=f.analyzer,
+        entity_type=f.entity_type,
+        entity_id=f.entity_id,
+        finding_type=f.finding_type,
+        score=float(f.score) if f.score else None,
+        band=f.band,
+        status=f.status,
+        summary=f.summary,
+        explanation=f.explanation,
+        payload_json=f.payload_json,
+        created_at=f.created_at
+    )
 
 @app.get("/accounts/top")
 def api_get_top_accounts(limit: int = 10, db: Session = Depends(get_db)):
+    from core.store.queries import get_top_accounts
     results = get_top_accounts(db, limit)
     return [
         {
@@ -140,124 +156,34 @@ def api_get_top_accounts(limit: int = 10, db: Session = Depends(get_db)):
         } for r in results
     ]
 
-@app.get("/stats")
-def api_get_stats(db: Session = Depends(get_db)):
-    total_flagged = db.scalar(select(func.count(func.distinct(Flag.transaction_id))))
-    
-    rule_counts = dict(db.execute(
-        select(Flag.rule_name, func.count()).group_by(Flag.rule_name)
-    ).all())
-    
-    band_counts = dict(db.execute(
-        select(Score.band, func.count()).group_by(Score.band)
-    ).all())
-    
-    # Also get explanations count
-    explanations_count = db.scalar(select(func.count()).select_from(Explanation))
-    
-    return {
-        "total_flagged": total_flagged or 0,
-        "by_rule": rule_counts,
-        "by_band": band_counts,
-        "explanations_generated": explanations_count or 0
-    }
-
-@app.get("/transactions/{transaction_id}", response_model=TransactionDetailResponse)
-def get_transaction_detail(transaction_id: str, db: Session = Depends(get_db)):
-    tx = db.scalar(select(Transaction).where(Transaction.transaction_id == transaction_id))
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-        
-    score = db.scalar(select(Score).where(Score.transaction_id == transaction_id))
-    flags = db.scalars(select(Flag).where(Flag.transaction_id == transaction_id)).all()
-    exp = db.scalar(select(Explanation).where(Explanation.transaction_id == transaction_id))
-    baseline = db.scalar(select(AccountBaseline).where(AccountBaseline.account_id == tx.account_id))
-    
-    exp_resp = None
-    if exp:
-        exp_resp = ExplanationResponse(
-            explanation=exp.explanation,
-            suggested_action=exp.suggested_action,
-            model_used=exp.model_used
-        )
-        
-    base_resp = None
-    if baseline:
-        base_resp = BaselineResponse(
-            tx_count=baseline.tx_count,
-            amount_median=float(baseline.amount_median),
-            amount_mad=float(baseline.amount_mad),
-            seen_countries=baseline.seen_countries,
-            seen_mccs=baseline.seen_mccs
-        )
-        
-    return TransactionDetailResponse(
-        transaction_id=tx.transaction_id,
-        account_id=tx.account_id,
-        timestamp=tx.timestamp,
-        amount=float(tx.amount),
-        currency=tx.currency,
-        merchant=tx.merchant,
-        merchant_category=tx.merchant_category,
-        country=tx.country,
-        channel=tx.channel,
-        counterparty_account=tx.counterparty_account,
-        score=int(score.score) if score else 0,
-        band=score.band if score else "none",
-        flags=[FlagResponse(rule_name=f.rule_name, reason=f.reason, severity=f.severity) for f in flags],
-        explanation=exp_resp,
-        baseline=base_resp
-    )
-
 @app.get("/graph")
-def get_graph_data(limit: int = 500, db: Session = Depends(get_db)):
-    """
-    Returns nodes and edges for the AML network graph.
-    Nodes: Accounts (with risk score and band)
-    Edges: Transfers between accounts (counterparty_account != null)
-    """
-    # Fetch top risky accounts to form the core of the graph
+def api_get_graph(limit: int = 500, db: Session = Depends(get_db)):
+    from core.store.models import Score, Transaction
     scores = db.scalars(select(Score).order_by(desc(Score.score)).limit(limit)).all()
-    target_accounts = {s.account_id for s in scores}
     
-    # We want transactions where both sides are in our target set OR at least one side is.
-    # For a focused subgraph, we'll fetch all transactions involving these accounts.
-    transactions = db.scalars(
-        select(Transaction).where(
-            (Transaction.account_id.in_(target_accounts)) |
-            (Transaction.counterparty_account.in_(target_accounts))
-        ).where(Transaction.counterparty_account.is_not(None))
-    ).all()
-    
-    # Extract all unique accounts in the edges
-    all_accounts = set()
+    nodes_map = {}
     edges = []
     
-    for tx in transactions:
-        all_accounts.add(tx.account_id)
-        all_accounts.add(tx.counterparty_account)
-        edges.append({
-            "source": tx.account_id,
-            "target": tx.counterparty_account,
-            "amount": float(tx.amount),
-            "transaction_id": tx.transaction_id
-        })
-        
-    # Get scores for all accounts involved
-    all_scores = db.scalars(select(Score).where(Score.account_id.in_(all_accounts))).all()
-    score_map = {s.account_id: s for s in all_scores}
+    for s in scores:
+        tx = db.scalar(select(Transaction).where(Transaction.transaction_id == s.transaction_id))
+        if tx and tx.counterparty_account:
+            nodes_map[tx.account_id] = max(nodes_map.get(tx.account_id, 0), s.score)
+            nodes_map[tx.counterparty_account] = max(nodes_map.get(tx.counterparty_account, 0), s.score / 2)
+            
+            edges.append({
+                "source": tx.account_id,
+                "target": tx.counterparty_account,
+                "amount": float(tx.amount),
+                "transaction_id": tx.transaction_id
+            })
+            
+    nodes = [
+        {
+            "id": acc_id,
+            "score": score,
+            "risk_band": "critical" if score >= 80 else "high" if score >= 60 else "medium" if score >= 30 else "low"
+        }
+        for acc_id, score in nodes_map.items()
+    ]
     
-    nodes = []
-    for acc in all_accounts:
-        s = score_map.get(acc)
-        nodes.append({
-            "id": acc,
-            "score": int(s.score) if s else 0,
-            "risk_band": s.band if s else "none"
-        })
-        
-    return {
-        "nodes": nodes,
-        "edges": edges
-    }
-
+    return {"nodes": nodes, "edges": edges}
