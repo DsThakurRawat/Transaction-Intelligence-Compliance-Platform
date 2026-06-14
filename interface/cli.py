@@ -111,9 +111,8 @@ def scan() -> None:
     """Run rule-based detection on stored transactions and persist flags."""
     init_db()
     with SessionLocal() as session:
-        # Clear prior flags to ensure idempotency
+        # Clear prior flags to ensure idempotency (will be committed at the end of the transaction)
         session.execute(delete(Flag))
-        session.commit()
         
         # Get all transactions
         # In a real system, we'd paginate or filter by unscanned.

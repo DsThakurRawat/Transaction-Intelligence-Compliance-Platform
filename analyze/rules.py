@@ -41,8 +41,12 @@ class OddHourRule(Rule):
     
     def evaluate(self, tx: Transaction, session: Session, settings: Settings) -> Optional[RuleFlag]:
         # tx.timestamp is naive but representing local/system time from generator.
-        if settings.rule_odd_hour_start <= tx.timestamp.hour <= settings.rule_odd_hour_end:
-            return RuleFlag(rule_name=self.name, reason=f"Transaction at odd hour: {tx.timestamp.hour}:00", severity="low")
+        start = settings.rule_odd_hour_start
+        end = settings.rule_odd_hour_end
+        hour = tx.timestamp.hour
+        is_odd = (start <= hour <= end) if start <= end else (hour >= start or hour <= end)
+        if is_odd:
+            return RuleFlag(rule_name=self.name, reason=f"Transaction at odd hour: {hour}:00", severity="low")
         return None
 
 class VelocityRule(Rule):
@@ -78,6 +82,7 @@ class StructuringRule(Rule):
         # If there are >= 2 such transactions, we flag for structuring.
         stmt = select(func.count()).select_from(Transaction).where(
             Transaction.account_id == tx.account_id,
+            Transaction.currency == tx.currency,
             Transaction.timestamp <= tx.timestamp,
             Transaction.timestamp >= window_start,
             Transaction.amount >= threshold * 0.80,
