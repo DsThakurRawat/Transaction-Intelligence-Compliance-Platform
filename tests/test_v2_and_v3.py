@@ -7,6 +7,7 @@ from data.generator import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
 from analyze.rules import engine as rule_engine
 from analyze.scoring import score_transaction
+from analyze.baselines import compute_baselines
 from config import get_settings
 
 @pytest.fixture(scope="module")
@@ -46,6 +47,7 @@ def setup_data(db_session_factory):
     # Run scan
     settings = get_settings()
     with db_session_factory() as session:
+        compute_baselines(session)
         transactions = session.scalars(select(Transaction).order_by(Transaction.timestamp)).all()
         for tx in transactions:
             flags = rule_engine.evaluate_transaction(tx, session)
@@ -97,12 +99,12 @@ def test_structuring_rule(setup_data, db_session_factory):
     caught = structuring_tx_ids.intersection(flagged_tx_ids)
     assert len(caught) > 0, "Structuring rule completely missed structuring anomalies"
 
-def test_country_mismatch_rule(setup_data, db_session_factory):
+def test_new_country_rule(setup_data, db_session_factory):
     df = setup_data
     geo_tx_ids = set(df[df['anomaly_type'] == 'geo_anomaly']['transaction_id'])
     
     with db_session_factory() as session:
-        flags = session.scalars(select(Flag).where(Flag.rule_name == 'country_mismatch')).all()
+        flags = session.scalars(select(Flag).where(Flag.rule_name == 'new_country')).all()
         flagged_tx_ids = {f.transaction_id for f in flags}
         
     assert len(geo_tx_ids) > 0, "No geo anomalies generated"
@@ -110,7 +112,7 @@ def test_country_mismatch_rule(setup_data, db_session_factory):
     # Due to >= 5 requirement, some early ones might be missed, but we should catch at least one
     # if it occurred late enough.
     caught = geo_tx_ids.intersection(flagged_tx_ids)
-    assert len(caught) > 0, "Country mismatch missed all geo_anomaly transactions"
+    assert len(caught) > 0, "New country rule missed all geo_anomaly transactions"
 
 def test_false_positive_baseline(setup_data, db_session_factory):
     df = setup_data
@@ -165,7 +167,7 @@ def test_score_calculation_logic():
     assert score4.score == 95 # 40 + 40 + 5 + 10 = 95
     
     # Let's add another one to push it over 100
-    flag5 = Flag(rule_name="country_mismatch", severity="high")
+    flag5 = Flag(rule_name="new_country", severity="high")
     score5 = score_transaction("tx5", "acc5", [flag3, flag4, flag1, flag2, flag5], settings)
     assert score5.score == 100 # 95 + 25 = 120 -> capped at 100
     assert score5.band == "critical"
@@ -184,6 +186,7 @@ def test_scan_idempotency_and_precision_preview(setup_data, db_session_factory):
         session.execute(delete(Flag))
         session.execute(delete(Score))
         
+        compute_baselines(session)
         transactions = session.scalars(select(Transaction).order_by(Transaction.timestamp)).all()
         for tx in transactions:
             flags = rule_engine.evaluate_transaction(tx, session)
