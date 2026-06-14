@@ -212,3 +212,10 @@ def test_scan_idempotency_and_precision_preview(setup_data, db_session_factory):
         # The top of the list should be mostly true anomalies
         precision = true_anomalies / len(top_tx_ids) if top_tx_ids else 0
         assert precision > 0.5, f"Top-20 precision is too low: {precision}"
+        
+        # Check get_top_accounts to prevent regression
+        from store.queries import get_top_accounts
+        top_accs = get_top_accounts(session, limit=10)
+        assert len(top_accs) > 0, "No accounts returned from get_top_accounts"
+        # Each tuple should be (account_id, max_score, critical_count)
+        assert len(top_accs[0]) == 3, "Account query should return exactly 3 columns"
