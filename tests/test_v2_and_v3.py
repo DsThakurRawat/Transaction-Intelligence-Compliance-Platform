@@ -6,6 +6,8 @@ from store.models import Transaction, Flag
 from data.generator import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
 from analyze.rules import engine as rule_engine
+from analyze.scoring import score_transaction
+from config import get_settings
 
 @pytest.fixture(scope="module")
 def db_session_factory(tmp_path_factory):
@@ -42,12 +44,15 @@ def setup_data(db_session_factory):
     # Settings are left at default since anomalies.py generates extreme enough values
     
     # Run scan
+    settings = get_settings()
     with db_session_factory() as session:
         transactions = session.scalars(select(Transaction).order_by(Transaction.timestamp)).all()
         for tx in transactions:
             flags = rule_engine.evaluate_transaction(tx, session)
             if flags:
                 session.add_all(flags)
+                score = score_transaction(tx.transaction_id, tx.account_id, flags, settings)
+                session.add(score)
         session.commit()
         
     yield df_final
@@ -124,3 +129,86 @@ def test_false_positive_baseline(setup_data, db_session_factory):
     # We just ensure it's calculated and reasonably low (e.g., under 5%).
     print(f"False Positive Rate: {fp_rate*100:.2f}% ({len(false_positives)} out of {len(benign_tx_ids)})")
     assert fp_rate < 0.35, f"False positive baseline too high: {fp_rate*100:.2f}%"
+import pytest
+import pandas as pd
+from sqlalchemy import select, func
+
+from store.models import Transaction, Flag, Score
+from analyze.scoring import score_transaction
+from config import get_settings
+
+def test_score_calculation_logic():
+    """Verify capped weighted sum, severity ordering, and band mapping work correctly."""
+    settings = get_settings()
+    
+    # 1. Single low-severity flag
+    flag1 = Flag(rule_name="odd_hour", severity="low")
+    score1 = score_transaction("tx1", "acc1", [flag1], settings)
+    assert score1.score == settings.scoring_rule_weights["odd_hour"]
+    assert score1.band == "low"
+    
+    # 2. Combination correctness (multiple flags sum up)
+    flag2 = Flag(rule_name="high_risk_mcc", severity="medium")
+    score2 = score_transaction("tx2", "acc2", [flag1, flag2], settings)
+    assert score2.score == settings.scoring_rule_weights["odd_hour"] + settings.scoring_rule_weights["high_risk_mcc"]
+    assert score2.band == "low" # 5 + 10 = 15, which is < 25
+    
+    # 3. Severity ordering (critical > low)
+    flag3 = Flag(rule_name="structuring", severity="critical")
+    score3 = score_transaction("tx3", "acc3", [flag3], settings)
+    assert score3.score == settings.scoring_rule_weights["structuring"]
+    assert score3.score > score1.score
+    
+    # 4. Sum logic without cap yet
+    flag4 = Flag(rule_name="velocity", severity="critical")
+    score4 = score_transaction("tx4", "acc4", [flag3, flag4, flag1, flag2], settings)
+    assert score4.score == 95 # 40 + 40 + 5 + 10 = 95
+    
+    # Let's add another one to push it over 100
+    flag5 = Flag(rule_name="country_mismatch", severity="high")
+    score5 = score_transaction("tx5", "acc5", [flag3, flag4, flag1, flag2, flag5], settings)
+    assert score5.score == 100 # 95 + 25 = 120 -> capped at 100
+    assert score5.band == "critical"
+
+def test_scan_idempotency_and_precision_preview(setup_data, db_session_factory):
+    """
+    Verify that scanning multiple times is idempotent for scores.
+    Also verify precision preview: the top of the ranked list should be very dense with anomalies.
+    """
+    df = setup_data
+    settings = get_settings()
+    
+    # Run scan again to test idempotency
+    from sqlalchemy import delete
+    with db_session_factory() as session:
+        session.execute(delete(Flag))
+        session.execute(delete(Score))
+        
+        transactions = session.scalars(select(Transaction).order_by(Transaction.timestamp)).all()
+        for tx in transactions:
+            flags = rule_engine.evaluate_transaction(tx, session)
+            if flags:
+                session.add_all(flags)
+                score = score_transaction(tx.transaction_id, tx.account_id, flags, settings)
+                session.add(score)
+        session.commit()
+    
+    with db_session_factory() as session:
+        # Check idempotency
+        score_count = session.scalar(select(func.count()).select_from(Score))
+        # Score count should be less than or equal to tx count (or exactly equal to flagged txs)
+        # It shouldn't double on second run.
+        flagged_tx_count = session.scalar(select(func.count(Flag.transaction_id.distinct())))
+        assert score_count == flagged_tx_count, "Score count should exactly match number of unique flagged transactions."
+        
+        # Check precision preview
+        from store.queries import get_top_transactions
+        top_txs = get_top_transactions(session, limit=20)
+        
+        # Get true anomaly labels from dataframe
+        top_tx_ids = [tx.transaction_id for tx in top_txs]
+        true_anomalies = df[df['transaction_id'].isin(top_tx_ids)]['is_anomaly'].sum()
+        
+        # The top of the list should be mostly true anomalies
+        precision = true_anomalies / len(top_tx_ids) if top_tx_ids else 0
+        assert precision > 0.5, f"Top-20 precision is too low: {precision}"

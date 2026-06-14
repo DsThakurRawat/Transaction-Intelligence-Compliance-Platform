@@ -5,12 +5,14 @@ from rich.console import Console
 from rich.table import Table
 from data.loader import ingest_csv
 from store.db import SessionLocal, init_db
-from store.queries import compute_summary
 from data.generator import generate_profiles, generate_normal_transactions
 from data.anomalies import inject_anomalies
 from data.adapter import map_kaggle_dataset
 from analyze.rules import engine as rule_engine
-from store.models import Transaction, Flag
+from analyze.scoring import score_transaction
+from config import get_settings
+from store.models import Transaction, Flag, Score
+from store.queries import compute_summary, get_top_transactions, get_top_accounts
 from sqlalchemy import select, delete
 
 app = typer.Typer(help="Transaction-and-AML-Detection-System")
@@ -111,8 +113,9 @@ def scan() -> None:
     """Run rule-based detection on stored transactions and persist flags."""
     init_db()
     with SessionLocal() as session:
-        # Clear prior flags to ensure idempotency (will be committed at the end of the transaction)
+        # Clear prior flags and scores to ensure idempotency
         session.execute(delete(Flag))
+        session.execute(delete(Score))
         
         # Get all transactions
         # In a real system, we'd paginate or filter by unscanned.
@@ -123,6 +126,7 @@ def scan() -> None:
             console.print("[yellow]No transactions to scan. Run `ingest` first.[/yellow]")
             return
             
+        settings = get_settings()
         console.print(f"Scanning {len(transactions)} transactions...")
         
         total_flags = 0
@@ -136,6 +140,9 @@ def scan() -> None:
                 for f in flags:
                     rule_counts[f.rule_name] = rule_counts.get(f.rule_name, 0) + 1
                     
+                score = score_transaction(tx.transaction_id, tx.account_id, flags, settings)
+                session.add(score)
+                    
         session.commit()
         
     console.print(f"[green]Scan complete! Generated {total_flags} flags.[/green]")
@@ -147,6 +154,37 @@ def scan() -> None:
             table.add_row(rule, str(count))
         console.print(table)
 
+
+@app.command()
+def top(
+    limit: int = typer.Option(10, help="Number of results to display"),
+) -> None:
+    """Show the top riskiest transactions and accounts."""
+    init_db()
+    with SessionLocal() as session:
+        top_txs = get_top_transactions(session, limit)
+        top_accs = get_top_accounts(session, limit)
+        
+    console.print("\n[bold red]Top Riskiest Transactions[/bold red]")
+    tx_table = Table(show_header=True)
+    tx_table.add_column("Score", justify="right", style="cyan")
+    tx_table.add_column("Band")
+    tx_table.add_column("Account ID")
+    tx_table.add_column("Transaction ID")
+    
+    for tx in top_txs:
+        tx_table.add_row(str(tx.score), tx.band, tx.account_id, tx.transaction_id)
+    console.print(tx_table)
+    
+    console.print("\n[bold red]Top Riskiest Accounts[/bold red]")
+    acc_table = Table(show_header=True)
+    acc_table.add_column("Account ID")
+    acc_table.add_column("Max Score", justify="right", style="cyan")
+    acc_table.add_column("Critical Flags", justify="right")
+    
+    for acc in top_accs:
+        acc_table.add_row(acc[0], str(acc[1]), str(acc[2]))
+    console.print(acc_table)
 
 if __name__ == "__main__":
     app()

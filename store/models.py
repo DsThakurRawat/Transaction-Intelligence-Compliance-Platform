@@ -40,3 +40,14 @@ class Flag(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
+
+class Score(Base):
+    __tablename__ = "scores"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    transaction_id: Mapped[str] = mapped_column(String, ForeignKey("transactions.transaction_id"), unique=True, index=True)
+    account_id: Mapped[str] = mapped_column(String, index=True)
+    score: Mapped[int] = mapped_column(Numeric(precision=3, scale=0))
+    band: Mapped[str] = mapped_column(String)
+    computed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )

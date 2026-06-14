@@ -29,6 +29,19 @@ class Settings(BaseSettings):
     rule_odd_hour_end: int = 5
     
     rule_high_risk_mcc: list[str] = ["5999", "6011", "6012"]
+    
+    # Scoring Config
+    scoring_rule_weights: dict[str, int] = {
+        "velocity": 40,
+        "structuring": 40,
+        "amount": 25,
+        "country_mismatch": 25,
+        "high_risk_mcc": 10,
+        "odd_hour": 5
+    }
+    scoring_band_low: int = 25
+    scoring_band_medium: int = 50
+    scoring_band_high: int = 75
 
 
 @lru_cache
