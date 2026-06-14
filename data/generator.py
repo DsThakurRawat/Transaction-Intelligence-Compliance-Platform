@@ -16,8 +16,8 @@ class AccountProfile(BaseModel):
     tx_rate: float
     currency: str
 
-def get_random_merchant(mcc: str, country: str) -> str:
-    return f"Merchant_{mcc}_{country}_{random.randint(1, 100)}"
+def get_random_merchant(mcc: str, country: str, py_rng: random.Random) -> str:
+    return f"Merchant_{mcc}_{country}_{py_rng.randint(1, 100)}"
 
 def generate_profiles(num_accounts: int, seed: int) -> List[AccountProfile]:
     rng = np.random.default_rng(seed)
@@ -78,7 +78,7 @@ def generate_normal_transactions(profiles: List[AccountProfile], days: int, seed
                 "timestamp": tx_time,
                 "amount": amount,
                 "currency": profile.currency,
-                "merchant": get_random_merchant(mcc, profile.country),
+                "merchant": get_random_merchant(mcc, profile.country, py_rng),
                 "merchant_category": mcc,
                 "country": profile.country,
                 "channel": py_rng.choice(["online", "pos"]),
