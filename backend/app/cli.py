@@ -7,6 +7,9 @@ from rich.table import Table
 from app.ingest.loader import ingest_csv
 from app.storage.db import SessionLocal, init_db
 from app.storage.queries import compute_summary
+from app.generate.generator import generate_profiles, generate_normal_transactions
+from app.generate.anomalies import inject_anomalies
+from app.generate.adapter import map_kaggle_dataset
 
 app = typer.Typer(help="Transaction-and-AML-Detection-System (v0)")
 console = Console()
@@ -62,6 +65,43 @@ def summary() -> None:
     for b in s.by_currency:
         cur.add_row(b.currency, f"{b.count:,}", f"{b.total:,.2f}")
     console.print(cur)
+
+
+@app.command()
+def generate(
+    accounts: int = typer.Option(100, help="Number of accounts to generate"),
+    days: int = typer.Option(30, help="Number of days of transactions"),
+    anomaly_rate: float = typer.Option(0.05, help="Target fraction of anomaly rows (e.g., 0.05 for 5%)"),
+    seed: int = typer.Option(42, help="Random seed for reproducible generation"),
+    out: Path = typer.Option(Path("synthetic_data.csv"), help="Output CSV path"),
+) -> None:
+    """Generate synthetic transactions with labeled anomalies."""
+    console.print(f"Generating profiles for {accounts} accounts (seed={seed})...")
+    profiles = generate_profiles(accounts, seed)
+    
+    console.print(f"Generating normal transactions over {days} days...")
+    df_normal = generate_normal_transactions(profiles, days, seed)
+    console.print(f"Generated {len(df_normal)} normal transactions.")
+    
+    console.print(f"Injecting anomalies (rate={anomaly_rate})...")
+    df_final = inject_anomalies(df_normal, anomaly_rate, seed)
+    
+    num_anomalies = df_final['is_anomaly'].sum()
+    console.print(f"Final dataset has {len(df_final)} rows ({num_anomalies} anomalies).")
+    
+    df_final.to_csv(out, index=False)
+    console.print(f"[green]Saved synthetic dataset to {out}[/green]")
+
+
+@app.command()
+def import_real(
+    input_csv: Path = typer.Argument(..., exists=True, readable=True, help="Kaggle creditcard.csv"),
+    out: Path = typer.Option(Path("real_mapped_data.csv"), help="Output mapped CSV path"),
+) -> None:
+    """Adapt the Kaggle Credit Card Fraud dataset into our schema."""
+    console.print(f"Mapping real dataset from {input_csv} to {out}...")
+    map_kaggle_dataset(str(input_csv), str(out))
+    console.print("[green]Mapping complete.[/green]")
 
 
 if __name__ == "__main__":

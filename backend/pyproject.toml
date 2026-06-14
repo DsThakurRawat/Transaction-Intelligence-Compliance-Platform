@@ -9,6 +9,9 @@ dependencies = [
     "pydantic>=2.10",
     "pydantic-settings>=2.7",
     "sqlalchemy>=2.0",
+    "pandas>=3.0.3",
+    "numpy>=2.4.6",
+    "faker>=40.23.0",
 ]
 
 [dependency-groups]
