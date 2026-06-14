@@ -13,6 +13,7 @@ from sqlalchemy import select, delete
 from core.pipeline import run_analyzer
 import analyzers.aml.analyzer
 import analyzers.reconciliation.analyzer
+import analyzers.categorization.analyzer
 
 app = typer.Typer(help="Transaction-and-AML-Detection-System")
 console = Console()
