@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     scoring_band_low: int = 25
     scoring_band_medium: int = 50
     scoring_band_high: int = 75
+    scoring_band_critical: int = 90
+    
+    # LLM Settings
+    groq_api_key: str | None = None
+    groq_model: str = "llama3-8b-8192"
 
 
 @lru_cache

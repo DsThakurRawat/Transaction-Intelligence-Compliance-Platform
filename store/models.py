@@ -63,3 +63,14 @@ class AccountBaseline(Base):
     computed_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
+
+class Explanation(Base):
+    __tablename__ = "explanations"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    transaction_id: Mapped[str] = mapped_column(String, ForeignKey("transactions.transaction_id"), unique=True, index=True)
+    explanation: Mapped[str] = mapped_column(String)
+    suggested_action: Mapped[str] = mapped_column(String)
+    model_used: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )

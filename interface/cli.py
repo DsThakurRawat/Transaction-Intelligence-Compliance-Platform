@@ -13,6 +13,7 @@ from analyze.scoring import score_transaction
 from analyze.baselines import compute_baselines
 from analyze.features import extract_features
 from analyze.ml import EnsembleAnomalyDetector
+from analyze.explain import generate_explanations
 from config import get_settings
 from store.models import Transaction, Flag, Score
 from store.queries import compute_summary, get_top_transactions, get_top_accounts
@@ -112,7 +113,7 @@ def import_real(
 
 
 @app.command()
-def scan() -> None:
+def scan(explain: bool = False) -> None:
     """Run rule-based detection on stored transactions and persist flags."""
     init_db()
     with SessionLocal() as session:
@@ -186,6 +187,10 @@ def scan() -> None:
                 
         session.commit()
         
+        if explain:
+            console.print("Phase 4: Generating LLM explanations for high-risk flags...")
+            generate_explanations(session, settings)
+        
     console.print(f"[green]Scan complete! Generated {total_flags} flags.[/green]")
     if rule_counts:
         table = Table(title="Flags by Rule")
@@ -245,6 +250,26 @@ def train() -> None:
     detector.train(df_features) # Unsupervised only in CLI
     detector.save()
     console.print("[green]Training complete. Model persisted to models/ensemble.joblib.[/green]")
+
+@app.command()
+def evaluate() -> None:
+    """Run the offline evaluation harness and generate SCORECARD.md"""
+    console.print("Running Evaluation Harness to generate SCORECARD.md...")
+    import subprocess
+    import sys
+    
+    result = subprocess.run([sys.executable, "-m", "pytest", "tests/test_v8.py", "-s", "-q"], capture_output=True, text=True)
+    if result.returncode == 0:
+        console.print("[green]Scorecard successfully generated at SCORECARD.md[/green]")
+        try:
+            with open("SCORECARD.md", "r") as f:
+                console.print(f.read())
+        except Exception:
+            pass
+    else:
+        console.print("[red]Evaluation failed![/red]")
+        console.print(result.stdout)
+        console.print(result.stderr)
 
 if __name__ == "__main__":
     app()
