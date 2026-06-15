@@ -1,96 +1,67 @@
-import Link from "next/link";
-import { Badge } from "@/components/Badge";
-import { RiskMeter } from "@/components/RiskMeter";
-import { fetchFindings } from "@/lib/api";
-import { Suspense } from "react";
-import { severityConfig } from "@/lib/severity";
+import { fetchFindings } from '@/lib/api';
+import { FilterBar } from '@/components/FilterBar';
+import { FindingsTable } from '@/components/FindingsTable';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
+import { Search } from 'lucide-react';
 
+export const revalidate = 10;
 export const dynamic = 'force-dynamic';
 
-async function FindingsTable({ searchParams }: { searchParams: { band?: string, page?: string } }) {
-  const page = parseInt(searchParams.page || "1", 10);
-  const limit = 50;
-  const offset = (page - 1) * limit;
-  const band = searchParams.band;
-  
+export default async function FindingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   try {
-    const findings = await fetchFindings(limit, offset, undefined, band);
+    const params = await searchParams;
+    const analyzer = typeof params.analyzer === 'string' ? params.analyzer : undefined;
+    const band = typeof params.band === 'string' ? params.band : undefined;
+    const status = typeof params.status === 'string' ? params.status : undefined;
+    const offset = typeof params.offset === 'string' ? parseInt(params.offset, 10) : 0;
+    
+    // Convert 'all' to undefined for the API call
+    const apiAnalyzer = analyzer === 'all' ? undefined : analyzer;
+
+    const findings = await fetchFindings(50, offset, apiAnalyzer, band, status);
 
     return (
-      <div className="bg-surface border border-border shadow-[0_1px_2px_rgba(21,33,59,0.04),0_2px_8px_rgba(21,33,59,0.06)] rounded-[var(--r-card)] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-surface-2 border-b border-border text-[12px] uppercase text-text-muted">
-                <th className="w-1 px-0"></th>
-                <th className="px-4 py-3 font-semibold">Finding ID</th>
-                <th className="px-4 py-3 font-semibold">Analyzer</th>
-                <th className="px-4 py-3 font-semibold">Score</th>
-                <th className="px-4 py-3 font-semibold">Band</th>
-                <th className="px-4 py-3 font-semibold">Entity</th>
-                <th className="px-4 py-3 font-semibold text-right">Status</th>
-                <th className="px-4 py-3 font-semibold">Time</th>
-              </tr>
-            </thead>
-            <tbody className="text-[14px]">
-              {findings.map(f => {
-                const config = severityConfig[f.band?.toLowerCase() || 'none'] || severityConfig['none'];
-                return (
-                  <tr key={f.id} className="border-b border-border hover:bg-surface-2 transition-colors relative group">
-                    <td className="w-1 px-0" style={{ backgroundColor: config.varSolid }}></td>
-                    <td className="px-4 py-4">
-                      <Link href={`/findings/${f.id}`} className="absolute inset-0" />
-                      <span className="num font-medium group-hover:text-brand transition-colors">{f.id.substring(0, 8)}...</span>
-                    </td>
-                    <td className="px-4 py-4 capitalize">{f.analyzer}</td>
-                    <td className="px-4 py-4">
-                      {f.score !== null ? <RiskMeter score={f.score} band={f.band || "medium"} /> : "-"}
-                    </td>
-                    <td className="px-4 py-4"><Badge band={f.band || "medium"} /></td>
-                    <td className="px-4 py-4 num">{f.entity_id.substring(0,8)}...</td>
-                    <td className="px-4 py-4 num text-right capitalize">{f.status.replace('_', ' ')}</td>
-                    <td className="px-4 py-4 num text-text-muted">{new Date(f.created_at).toLocaleString()}</td>
-                  </tr>
-                );
-              })}
-              {findings.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-text-muted">No findings in this range.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      <div className="flex flex-col max-w-7xl mx-auto h-full">
+        <div className="flex flex-col gap-2 mb-6">
+          <h1 className="text-xl font-semibold text-text">Review Findings</h1>
+          <p className="text-sm text-text-muted">Prioritize, investigate, and resolve compliance flags.</p>
         </div>
+
+        <FilterBar />
+
+        {findings.length === 0 ? (
+          <EmptyState 
+            icon={Search}
+            title="No findings match"
+            hint="Try adjusting your filters or running the analyzers."
+          />
+        ) : (
+          <>
+            <FindingsTable findings={findings} />
+            {findings.length >= 50 && (
+              <div className="mt-6 flex justify-center">
+                <a 
+                  href={`/findings?offset=${offset + 50}${analyzer ? `&analyzer=${analyzer}` : ''}${band ? `&band=${band}` : ''}${status ? `&status=${status}` : ''}`}
+                  className="px-4 py-2 bg-surface border border-border text-text font-medium text-sm rounded-[var(--r-control)] hover:bg-surface-sunken transition-colors"
+                >
+                  Load More
+                </a>
+              </div>
+            )}
+          </>
+        )}
       </div>
     );
   } catch (error) {
     return (
-      <div className="p-6 bg-risk-critical-soft text-risk-critical rounded-[var(--r-card)] border border-risk-critical/20">
-        Couldn&apos;t load findings. Check if the API is running.
+      <div className="max-w-7xl mx-auto py-12">
+        <ErrorState message="Failed to fetch findings. The backend may be offline." />
       </div>
     );
   }
-}
-
-export default function FindingsPage({ searchParams }: { searchParams: { band?: string, page?: string } }) {
-  return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-6">
-      <div className="flex justify-between items-end">
-        <div>
-          <h1 className="text-2xl font-semibold mb-2">Findings</h1>
-          <p className="text-text-muted">All alerts, discrepancies, and SAR drafts.</p>
-        </div>
-        <div className="flex gap-2">
-          {/* Simple Band Filter Links */}
-          <Link href="/findings" className="px-3 py-1.5 bg-surface border border-border rounded-md text-sm hover:bg-surface-2 transition-colors">All</Link>
-          <Link href="/findings?band=critical" className="px-3 py-1.5 bg-surface border border-border rounded-md text-sm hover:bg-surface-2 transition-colors">Critical</Link>
-          <Link href="/findings?band=high" className="px-3 py-1.5 bg-surface border border-border rounded-md text-sm hover:bg-surface-2 transition-colors">High</Link>
-        </div>
-      </div>
-      
-      <Suspense fallback={<div className="animate-pulse bg-surface-2 h-[600px] rounded-[var(--r-card)]"></div>}>
-        <FindingsTable searchParams={searchParams} />
-      </Suspense>
-    </div>
-  );
 }

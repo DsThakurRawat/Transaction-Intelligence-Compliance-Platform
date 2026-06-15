@@ -1,15 +1,9 @@
-export type RiskBand = "critical" | "high" | "medium" | "low" | "none";
+export const BAND = {
+  critical: { solid: '#C2334D', soft: '#F7E0E4', label: 'Critical' },
+  high:     { solid: '#D86A2C', soft: '#F8E6D9', label: 'High' },
+  medium:   { solid: '#C29A2E', soft: '#F6EDD7', label: 'Medium' },
+  low:      { solid: '#3E7CA8', soft: '#E1ECF4', label: 'Low' },
+  clean:    { solid: '#2E8B6F', soft: '#DCEFE8', label: 'Clean' },
+} as const;
 
-interface BandConfig {
-  label: string;
-  varSolid: string;
-  varSoft: string;
-}
-
-export const severityConfig: Record<string, BandConfig> = {
-  critical: { label: "CRITICAL", varSolid: "var(--risk-critical)", varSoft: "var(--risk-critical-soft)" },
-  high: { label: "HIGH", varSolid: "var(--risk-high)", varSoft: "var(--risk-high-soft)" },
-  medium: { label: "MEDIUM", varSolid: "var(--risk-medium)", varSoft: "var(--risk-medium-soft)" },
-  low: { label: "LOW", varSolid: "var(--risk-low)", varSoft: "var(--risk-low-soft)" },
-  none: { label: "CLEAN", varSolid: "var(--risk-clean)", varSoft: "var(--risk-clean-soft)" },
-};
+export type RiskBand = keyof typeof BAND;

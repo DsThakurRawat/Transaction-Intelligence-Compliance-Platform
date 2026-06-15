@@ -1,99 +1,117 @@
-import Link from "next/link";
-import { SummaryCard } from "@/components/SummaryCard";
-import { Badge } from "@/components/Badge";
-import { RiskMeter } from "@/components/RiskMeter";
-import { fetchStats, fetchTopFindings } from "@/lib/api";
-import { Suspense } from "react";
+import { fetchStats, fetchTopFindings } from '@/lib/api';
+import { StatCard } from '@/components/StatCard';
+import { AnalyzerCard } from '@/components/AnalyzerCard';
+import { FindingsTable } from '@/components/FindingsTable';
+import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
+import { Database } from 'lucide-react';
 
+// Force dynamic rendering and revalidate every 10s
+export const revalidate = 10;
 export const dynamic = 'force-dynamic';
 
-async function DashboardContent() {
+export default async function OverviewPage() {
   try {
     const [stats, topFindings] = await Promise.all([
       fetchStats(),
-      fetchTopFindings(10)
+      fetchTopFindings(5)
     ]);
 
-    const criticalCount = stats.by_band["critical"] || 0;
-    const highCount = stats.by_band["high"] || 0;
+    const isSystemEmpty = stats.total_transactions === 0 && stats.total_findings === 0;
 
     return (
-      <div className="flex flex-col gap-8">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <SummaryCard title="Total Findings" value={stats.total.toLocaleString()} />
-          <SummaryCard title="Critical Risk" value={criticalCount.toLocaleString()} band="critical" />
-          <SummaryCard title="High Risk" value={highCount.toLocaleString()} band="high" />
-          <SummaryCard title="AML Alerts" value={(stats.by_analyzer["aml"] || 0).toLocaleString()} />
+      <div className="flex flex-col gap-8 max-w-7xl mx-auto">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-xl font-semibold text-text">Platform Overview</h1>
+          <p className="text-sm text-text-muted">Unified compliance queue across all analyzers.</p>
         </div>
-        
-        <div className="bg-surface border border-border shadow-[0_1px_2px_rgba(21,33,59,0.04),0_2px_8px_rgba(21,33,59,0.06)] rounded-[var(--r-card)] overflow-hidden">
-          <div className="px-6 py-4 border-b border-border bg-surface-2/50 flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Top Priority Findings</h2>
-            <Link href="/findings" className="text-sm font-medium text-brand hover:underline">
-              View All
-            </Link>
+
+        {/* 1. Stat Cards Row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard 
+            title="Total Transactions" 
+            value={stats.total_transactions.toLocaleString()} 
+            hint="Ingested payload"
+          />
+          <StatCard 
+            title="Open Findings" 
+            value={stats.total_findings.toLocaleString()} 
+            hint="Across all analyzers"
+          />
+          <StatCard 
+            title="Critical Risk" 
+            value={stats.critical_findings.toLocaleString()} 
+            band="critical"
+            hint="Requires immediate action"
+          />
+          <StatCard 
+            title="Accounts Monitored" 
+            value={stats.active_accounts.toLocaleString()} 
+          />
+        </div>
+
+        {/* 2. The Five Analyzers (Centerpiece) */}
+        <div className="flex flex-col gap-4">
+          <h2 className="text-base font-semibold text-text">Analyzer Status</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+            <AnalyzerCard 
+              analyzer="aml" 
+              count={stats.by_analyzer.aml || 0} 
+              metricLabel="Critical Structuring" 
+              metricValue={stats.critical_findings} 
+              topBand={stats.by_analyzer.aml > 0 ? 'critical' : 'clean'}
+            />
+            <AnalyzerCard 
+              analyzer="reconciliation" 
+              count={stats.by_analyzer.reconciliation || 0} 
+              metricLabel="Open Breaks" 
+              metricValue={stats.by_analyzer.reconciliation || 0}
+              topBand={stats.by_analyzer.reconciliation > 0 ? 'high' : 'clean'}
+            />
+            <AnalyzerCard 
+              analyzer="categorization" 
+              count={stats.by_analyzer.categorization || 0} 
+              metricLabel="Needs Review" 
+              metricValue={stats.by_analyzer.categorization || 0}
+              topBand={stats.by_analyzer.categorization > 0 ? 'medium' : 'clean'}
+            />
+            <AnalyzerCard 
+              analyzer="disputes" 
+              count={stats.by_analyzer.disputes || 0} 
+              metricLabel="Deadlines ≤ 7d" 
+              metricValue={0} // Placeholder for disputes deadline logic
+              topBand={stats.by_analyzer.disputes > 0 ? 'high' : 'clean'}
+            />
+            <AnalyzerCard 
+              analyzer="reporting" 
+              count={stats.by_analyzer.reporting || 0} 
+              metricLabel="SARs Pending" 
+              metricValue={stats.by_analyzer.reporting || 0}
+              topBand={stats.by_analyzer.reporting > 0 ? 'medium' : 'clean'}
+            />
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-surface-2 border-b border-border text-[12px] uppercase text-text-muted">
-                  <th className="px-6 py-3 font-semibold">Finding ID</th>
-                  <th className="px-6 py-3 font-semibold">Analyzer</th>
-                  <th className="px-6 py-3 font-semibold">Entity</th>
-                  <th className="px-6 py-3 font-semibold text-right">Risk Score</th>
-                  <th className="px-6 py-3 font-semibold">Severity</th>
-                </tr>
-              </thead>
-              <tbody className="text-[14px]">
-                {topFindings.map(f => (
-                  <tr key={f.id} className="border-b border-border hover:bg-surface-2 transition-colors relative group">
-                    <td className="px-6 py-4">
-                      <Link href={`/findings/${f.id}`} className="absolute inset-0" />
-                      <span className="num font-medium group-hover:text-brand transition-colors">{f.id.substring(0, 8)}...</span>
-                    </td>
-                    <td className="px-6 py-4 capitalize">{f.analyzer}</td>
-                    <td className="px-6 py-4 num">{f.entity_id.substring(0, 8)}...</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end">
-                        {f.score ? <RiskMeter score={f.score} band={f.band || "medium"} /> : "-"}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <Badge band={f.band || "medium"} />
-                    </td>
-                  </tr>
-                ))}
-                {topFindings.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center text-text-muted">No findings right now.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+        </div>
+
+        {/* 3. Top Critical Findings Strip */}
+        <div className="flex flex-col gap-4">
+          <h2 className="text-base font-semibold text-text">Top Critical Findings</h2>
+          {isSystemEmpty ? (
+            <EmptyState 
+              icon={Database}
+              title="Awaiting Data"
+              hint="The database is currently empty. Run the analyzers via the CLI to populate the dashboard."
+            />
+          ) : (
+            <FindingsTable findings={topFindings} />
+          )}
         </div>
       </div>
     );
   } catch (error) {
     return (
-      <div className="p-6 bg-risk-critical-soft text-risk-critical rounded-[var(--r-card)]">
-        Couldn&apos;t load dashboard data. Check if the API is running.
+      <div className="max-w-7xl mx-auto py-12">
+        <ErrorState message="Could not connect to the backend. The API may be cold-starting or offline." />
       </div>
     );
   }
-}
-
-export default function Home() {
-  return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold mb-2">Platform Dashboard</h1>
-        <p className="text-text-muted">Unified view of AML, Reconciliation, and Disputes.</p>
-      </div>
-      
-      <Suspense fallback={<div className="animate-pulse bg-surface-2 h-96 rounded-[var(--r-card)]"></div>}>
-        <DashboardContent />
-      </Suspense>
-    </div>
-  );
 }

@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { Sidebar } from "@/components/Sidebar";
-import { TopBar } from "@/components/TopBar";
+import { AppShell } from "@/components/AppShell";
 
 export default function RootLayout({
   children,
@@ -28,15 +28,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased text-text bg-bg h-screen flex overflow-hidden`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased text-text bg-canvas h-screen flex overflow-hidden`}
       >
         <Sidebar />
-        <div className="flex-1 flex flex-col min-w-0">
-          <TopBar />
-          <main className="flex-1 overflow-auto p-8">
-            {children}
-          </main>
-        </div>
+        <AppShell>
+          {children}
+        </AppShell>
       </body>
     </html>
   );

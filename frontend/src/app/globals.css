@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: var(--bg);
+  --color-canvas: var(--canvas);
   --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-border: var(--border);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
   --color-text: var(--text);
   --color-text-muted: var(--text-muted);
-  --color-brand: var(--brand);
-  --color-brand-weak: var(--brand-weak);
+  --color-border: var(--border);
 
   --color-risk-critical: var(--risk-critical);
   --color-risk-critical-soft: var(--risk-critical-soft);
@@ -28,46 +28,46 @@
 
 :root {
   /* Light Theme */
-  --bg: #F7F9FC;
+  --canvas: #F7F9FC;
   --surface: #FFFFFF;
-  --surface-2: #F1F4F9;
-  --border: #E3E8F0;
-  --text: #15213B;
-  --text-muted: #5B6B85;
+  --surface-sunken: #EEF2F8;
   --brand: #27406B;
-  --brand-weak: #E8EEF7;
+  --brand-ink: #15213B;
+  --text: #1B2330;
+  --text-muted: #5C6B7C;
+  --border: #E2E8F2;
 
   /* Risk Ramp */
   --risk-critical: #C2334D;
-  --risk-critical-soft: #FBE9EC;
+  --risk-critical-soft: #F7E0E4;
   
   --risk-high: #D86A2C;
-  --risk-high-soft: #FBF0E7;
+  --risk-high-soft: #F8E6D9;
   
   --risk-medium: #C29A2E;
-  --risk-medium-soft: #FAF5E6;
+  --risk-medium-soft: #F6EDD7;
   
   --risk-low: #3E7CA8;
-  --risk-low-soft: #EAF2F8;
+  --risk-low-soft: #E1ECF4;
   
   --risk-clean: #2E8B6F;
-  --risk-clean-soft: #E7F4EF;
+  --risk-clean-soft: #DCEFE8;
   
-  --r-card: 10px;
+  --r-card: 12px;
   --r-control: 8px;
   --r-pill: 999px;
 }
 
 html.dark {
   /* Dark Theme */
-  --bg: #0E1525;
+  --canvas: #0E1525;
   --surface: #151E33;
-  --surface-2: #1C2741;
+  --surface-sunken: #1C2741;
   --border: #26324F;
   --text: #E8EDF7;
   --text-muted: #94A3C0;
   --brand: #5B82C4;
-  --brand-weak: #1B2A47;
+  --brand-ink: #1B2A47;
   
   --risk-critical-soft: #3A1822;
   --risk-high-soft: #36241A;
@@ -76,7 +76,7 @@ html.dark {
 }
 
 body {
-  background-color: var(--bg);
+  background-color: var(--canvas);
   color: var(--text);
   font-family: var(--font-sans), sans-serif;
   margin: 0;
