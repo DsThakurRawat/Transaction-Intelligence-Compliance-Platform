@@ -9,7 +9,8 @@ export function TopBar() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+        const rawUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+        const API_BASE = rawUrl.replace(/\/+$/, '');
         const res = await fetch(`${API_BASE}/health`);
         setHealthOk(res.ok);
       } catch (e) {
