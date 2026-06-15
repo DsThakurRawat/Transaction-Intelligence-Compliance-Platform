@@ -1,13 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { ScorePill } from './ScorePill';
-
-export interface TopAccount {
-  account_id: string;
-  total_score: number;
-  finding_count: number;
-  critical_count: number;
-}
+import { TopAccount } from '@/lib/api';
 
 export function AccountsTable({ accounts }: { accounts: TopAccount[] }) {
   if (!accounts || accounts.length === 0) return null;

@@ -54,7 +54,8 @@ export async function fetchFindingDetail(id: string): Promise<FindingResponse> {
 export interface TopAccount {
   account_id: string;
   total_score: number;
-  critical_flags: number;
+  finding_count: number;
+  critical_count: number;
 }
 
 export interface GraphNode {
@@ -78,7 +79,13 @@ export interface GraphData {
 export async function fetchTopAccounts(limit = 50): Promise<TopAccount[]> {
   const res = await fetch(`${API_BASE}/accounts/top?limit=${limit}`, { next: { revalidate: 10 } });
   if (!res.ok) throw new Error('Failed to fetch top accounts');
-  return res.json();
+  const data = await res.json();
+  return data.map((d: any) => ({
+    account_id: d.account_id,
+    total_score: d.total_score,
+    finding_count: d.finding_count || d.critical_flags || 1, // Fallback if backend is old
+    critical_count: d.critical_count || d.critical_flags || 0
+  }));
 }
 
 export async function fetchGraphData(limit = 500): Promise<GraphData> {
