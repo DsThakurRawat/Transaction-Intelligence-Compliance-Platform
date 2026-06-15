@@ -28,7 +28,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
           <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-3">
-                <SeverityBadge band={finding.severity} />
+                <SeverityBadge band={finding.band as any} />
                 <AnalyzerBadge analyzer={finding.analyzer} />
                 <span className="capitalize text-xs font-medium border border-border px-2 py-0.5 rounded-[var(--r-control)] bg-surface-sunken text-text-muted">
                   {finding.status.replace('_', ' ')}
@@ -39,7 +39,7 @@ export default async function FindingDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="shrink-0 flex flex-col items-end">
               <span className="text-xs font-medium text-text-muted uppercase tracking-wide mb-2">Risk Score</span>
-              <ScorePill score={finding.score} band={finding.severity} variant="large" />
+              <ScorePill score={finding.score || 0} band={finding.band as any} variant="large" />
             </div>
           </div>
         </div>

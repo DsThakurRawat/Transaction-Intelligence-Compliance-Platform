@@ -3,19 +3,9 @@ import Link from 'next/link';
 import { SeverityBadge } from './SeverityBadge';
 import { AnalyzerBadge } from './AnalyzerBadge';
 import { ScorePill } from './ScorePill';
+import { FindingResponse } from '@/lib/api';
 
-interface Finding {
-  id: string;
-  analyzer: string;
-  entity_id: string;
-  severity: string;
-  score: number;
-  status: string;
-  summary: string;
-  created_at: string;
-}
-
-export function FindingsTable({ findings }: { findings: Finding[] }) {
+export function FindingsTable({ findings }: { findings: FindingResponse[] }) {
   if (!findings || findings.length === 0) {
     return null; // Handled by EmptyState upstream
   }
@@ -38,7 +28,7 @@ export function FindingsTable({ findings }: { findings: Finding[] }) {
           {findings.map((f) => (
             <tr key={f.id} className="hover:bg-brand-weak/30 transition-colors group">
               <td className="px-4 py-3">
-                <SeverityBadge band={f.severity} />
+                <SeverityBadge band={f.band as any} />
               </td>
               <td className="px-4 py-3">
                 <AnalyzerBadge analyzer={f.analyzer} />
@@ -49,7 +39,7 @@ export function FindingsTable({ findings }: { findings: Finding[] }) {
                 </Link>
               </td>
               <td className="px-4 py-3">
-                <ScorePill score={f.score} band={f.severity} />
+                <ScorePill score={f.score || 0} band={f.band as any} />
               </td>
               <td className="px-4 py-3">
                 <span className="capitalize text-text-muted text-xs font-medium border border-border px-2 py-0.5 rounded-[var(--r-control)] bg-canvas">
